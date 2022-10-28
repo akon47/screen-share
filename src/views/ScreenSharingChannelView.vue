@@ -51,7 +51,6 @@ export default defineComponent({
         if (this.isHost) {
           this.rtcPeerConnections.set(userId, new RTCPeerConnection({
             iceServers: [
-              { urls: 'stun:stun.services.mozilla.com' },
               { urls: 'stun:stun.l.google.com:19302' },
             ],
           }));
@@ -89,7 +88,6 @@ export default defineComponent({
         } else if (this.isGuest) {
           this.rtcPeerConnections.set(userId, new RTCPeerConnection({
             iceServers: [
-              { urls: 'stun:stun.services.mozilla.com' },
               { urls: 'stun:stun.l.google.com:19302' },
             ],
           }));
