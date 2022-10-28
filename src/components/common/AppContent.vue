@@ -1,6 +1,6 @@
 <template>
   <div class="content-container">
-    <router-view v-slot="{ Component }">
+    <router-view v-slot="{ Component }" :key="$route.fullPath">
       <transition name="component-fade" mode="out-in">
         <component :is="Component" class="content-item"/>
       </transition>

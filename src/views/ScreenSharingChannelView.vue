@@ -153,7 +153,8 @@ export default defineComponent({
       })
       .then((joinSharingChannelResponse) => {
         this.$router.push(`/screen-sharing/${joinSharingChannelResponse.channelId}?guestToken=${joinSharingChannelResponse.guestToken}`);
-      });
+      })
+      return;
     }
 
     if (this.hostToken) {
