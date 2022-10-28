@@ -66,10 +66,7 @@ export default class SignalingWebSocketClient {
       authorizationToken: this.authorizationToken,
       type: 'RELAY_ICE_CANDIDATE',
       userId: targetUserId,
-      iceCandidate: {
-        sdpMLineIndex: candidate.sdpMLineIndex,
-        candidate: candidate.candidate,
-      },
+      iceCandidate: candidate,
     } as RelayIceCandidateDto));
   }
 
