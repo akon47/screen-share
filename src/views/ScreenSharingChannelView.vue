@@ -45,15 +45,25 @@ export default defineComponent({
   },
   methods: {
     async initializeWebSocket(authorizationToken: String) {
+      const rtcConfiguration = {
+        iceServers: [
+          {
+            urls: [
+              'stun:stun.l.google.com:19302',
+              'stun:stun1.l.google.com:19302',
+              'stun:stun2.l.google.com:19302',
+              'stun:stun3.l.google.com:19302',
+              'stun:stun4.l.google.com:19302',
+            ],
+          },
+        ],
+      };
+
       this.signalingWebSocketClient = new SignalingWebSocketClient(authorizationToken);
 
       this.signalingWebSocketClient.onuserjoined = async (userId) => {
         if (this.isHost) {
-          this.rtcPeerConnections.set(userId, new RTCPeerConnection({
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-            ],
-          }));
+          this.rtcPeerConnections.set(userId, new RTCPeerConnection(rtcConfiguration));
           const peer = this.rtcPeerConnections.get(userId);
           if (peer) {
             peer.onicecandidate = (ev) => {
@@ -86,11 +96,7 @@ export default defineComponent({
         if (this.isHost) {
           await this.rtcPeerConnections.get(userId)?.setRemoteDescription(new RTCSessionDescription(sessionDescription));
         } else if (this.isGuest) {
-          this.rtcPeerConnections.set(userId, new RTCPeerConnection({
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-            ],
-          }));
+          this.rtcPeerConnections.set(userId, new RTCPeerConnection(rtcConfiguration));
           const peer = this.rtcPeerConnections.get(userId);
           if (peer) {
             peer.onicecandidate = (ev) => {
@@ -151,7 +157,7 @@ export default defineComponent({
       })
       .then((joinSharingChannelResponse) => {
         this.$router.push(`/screen-sharing/${joinSharingChannelResponse.channelId}?guestToken=${joinSharingChannelResponse.guestToken}`);
-      })
+      });
       return;
     }
 
