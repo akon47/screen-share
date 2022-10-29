@@ -1,7 +1,9 @@
 <template>
   <div class="screen-sharing-channel-container">
-    <div id="content-wrapper">
-      <video class="screen-video" ref="video" playsinline autoplay muted/>
+    <div v-show="isLoaded" id="content-wrapper">
+      <div>
+        <video class="screen-video" ref="video" playsinline autoplay muted/>
+      </div>
     </div>
     {{ channelId }}
   </div>
@@ -41,6 +43,7 @@ export default defineComponent({
       stream: {} as MediaStream,
       rtcPeerConnections: new Map<String, RTCPeerConnection>(),
       signalingWebSocketClient: {} as SignalingWebSocketClient,
+      isLoaded: false,
     };
   },
   methods: {
@@ -61,7 +64,7 @@ export default defineComponent({
 
       this.signalingWebSocketClient = new SignalingWebSocketClient(authorizationToken);
 
-      this.signalingWebSocketClient.onuserjoined = async (userId) => {
+      this.signalingWebSocketClient.onuserjoined = (userId) => {
         if (this.isHost) {
           this.rtcPeerConnections.set(userId, new RTCPeerConnection(rtcConfiguration));
           const peer = this.rtcPeerConnections.get(userId);
@@ -72,9 +75,11 @@ export default defineComponent({
               }
             };
             this.stream.getTracks().forEach((track) => peer.addTrack(track, this.stream));
-            const offer = await peer.createOffer();
-            await peer.setLocalDescription(offer);
-            this.signalingWebSocketClient.relaySessionDescription(userId, offer);
+            peer.createOffer()
+            .then((offer) => {
+              peer.setLocalDescription(offer);
+              this.signalingWebSocketClient.relaySessionDescription(userId, offer);
+            });
           }
         }
       };
@@ -92,9 +97,9 @@ export default defineComponent({
         }
       };
 
-      this.signalingWebSocketClient.onrelaysessiondescription = async (userId, sessionDescription) => {
+      this.signalingWebSocketClient.onrelaysessiondescription = (userId, sessionDescription) => {
         if (this.isHost) {
-          await this.rtcPeerConnections.get(userId)?.setRemoteDescription(new RTCSessionDescription(sessionDescription));
+          this.rtcPeerConnections.get(userId)?.setRemoteDescription(new RTCSessionDescription(sessionDescription));
         } else if (this.isGuest) {
           this.rtcPeerConnections.set(userId, new RTCPeerConnection(rtcConfiguration));
           const peer = this.rtcPeerConnections.get(userId);
@@ -110,16 +115,18 @@ export default defineComponent({
               const videoElement = this.$refs.video as HTMLVideoElement;
               videoElement.srcObject = this.stream;
             };
-            await peer.setRemoteDescription(new RTCSessionDescription(sessionDescription));
-            const answer = await peer.createAnswer();
-            await peer.setLocalDescription(answer);
-            this.signalingWebSocketClient.relaySessionDescription(userId, answer);
+            peer.setRemoteDescription(new RTCSessionDescription(sessionDescription));
+            peer.createAnswer()
+            .then((answer) => {
+              peer.setLocalDescription(answer);
+              this.signalingWebSocketClient.relaySessionDescription(userId, answer);
+            });
           }
         }
       };
 
-      this.signalingWebSocketClient.onrelayicecandidate = async (userId, iceCandidate) => {
-        await this.rtcPeerConnections.get(userId)?.addIceCandidate(new RTCIceCandidate(iceCandidate));
+      this.signalingWebSocketClient.onrelayicecandidate = (userId, iceCandidate) => {
+        this.rtcPeerConnections.get(userId)?.addIceCandidate(new RTCIceCandidate(iceCandidate));
       };
     },
     async initializeHostMode(authorizationToken: String) {
@@ -161,10 +168,15 @@ export default defineComponent({
       return;
     }
 
-    if (this.hostToken) {
-      await this.initializeHostMode(this.hostToken);
-    } else if (this.guestToken) {
-      await this.initializeGuestMode(this.guestToken);
+    try {
+      this.isLoaded = false;
+      if (this.hostToken) {
+        await this.initializeHostMode(this.hostToken);
+      } else if (this.guestToken) {
+        await this.initializeGuestMode(this.guestToken);
+      }
+    } finally {
+      this.isLoaded = true;
     }
   },
   unmounted() {

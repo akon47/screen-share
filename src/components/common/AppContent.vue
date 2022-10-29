@@ -13,11 +13,6 @@ import { defineComponent } from 'vue';
 
 export default defineComponent({
   name: 'AppContent',
-  data() {
-    return {
-      peerConnections: new Map<string, RTCPeerConnection>(),
-    };
-  },
 });
 </script>
 

@@ -16,6 +16,16 @@ const router = createRouter({
       component: () => import('../views/ScreenSharingView.vue'),
     },
     {
+      path: '/screen-sharing/create-channel',
+      name: 'CreateScreenSharingChannel',
+      component: () => import('../views/CreateScreenSharingChannelView.vue'),
+    },
+    {
+      path: '/screen-sharing/join-channel',
+      name: 'JoinScreenSharingChannel',
+      component: () => import('../views/JoinScreenSharingChannelView.vue'),
+    },
+    {
       path: '/screen-sharing/:channelId',
       name: 'ScreenSharingChannel',
       component: () => import('../views/ScreenSharingChannelView.vue'),
