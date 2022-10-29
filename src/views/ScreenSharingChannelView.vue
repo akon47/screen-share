@@ -13,6 +13,7 @@
 import { defineComponent } from 'vue';
 import { joinSharingChannel } from '@/api/sharing';
 import SignalingWebSocketClient from '@/utils/websocket';
+import { HttpApiError } from '@/api/common/httpApiClient';
 
 export default defineComponent({
   name: 'ScreenSharingChannelView',
@@ -156,15 +157,35 @@ export default defineComponent({
 
       await this.initializeWebSocket(authorizationToken);
     },
-  },
-  async mounted() {
-    if (!this.hostToken && !this.guestToken) {
-      await joinSharingChannel(this.channelId, {
-        password: null,
+    async joinChannel(channelId: string, password: string) {
+      await joinSharingChannel(channelId, {
+        password: password,
       })
       .then((joinSharingChannelResponse) => {
         this.$router.push(`/screen-sharing/${joinSharingChannelResponse.channelId}?guestToken=${joinSharingChannelResponse.guestToken}`);
+      })
+      .catch(async (error: HttpApiError) => {
+        if (error.isUnauthorized()) {
+          alert('Please check the channel password.');
+
+          const password = prompt('Please enter the sharing channel password.');
+          if (password) {
+            await this.joinChannel(channelId, password);
+          } else {
+            this.$router.push('/');
+          }
+        } else if (error.isNotFound()) {
+          alert('This channel does not exist.');
+          this.$router.push('/');
+        } else {
+          this.$router.push('/');
+        }
       });
+    },
+  },
+  async mounted() {
+    if (!this.hostToken && !this.guestToken) {
+      await this.joinChannel(this.channelId, '');
       return;
     }
 

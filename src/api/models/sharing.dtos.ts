@@ -19,7 +19,7 @@ export interface CreateSharingChannelResponseDto extends DataTransferObject {
 // dto for join sharing channel
 export interface JoinSharingChannelRequestDto extends DataTransferObject {
   // channel password
-  readonly password: string | null;
+  readonly password: string;
 }
 
 // dto for join sharing channel

@@ -6,9 +6,10 @@
         <input :class="{'invalid': channelId && !isChannelIdValid}"
                type="text" id="channel-id" v-model="channelId" placeholder="Sharing Channel Id" maxlength="36"/>
       </div>
-      <div v-show="requirePassword">
-        <input :class="{'invalid': requirePassword && (!password || !isPasswordValid)}"
-               type="text" id="channel-password" v-model="password" placeholder="Sharing Channel Password" maxlength="16"/>
+      <div>
+        <input :class="{'invalid': password && !isPasswordValid}"
+               type="text" id="channel-password" v-model="password" placeholder="Sharing Channel Password"
+               maxlength="16"/>
       </div>
       <button :disabled="!isChannelIdValid || !isPasswordValid || isLoading"
               @click="joiningSharingChannel">
@@ -27,6 +28,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { joinSharingChannel } from '@/api/sharing';
+import { HttpApiError } from '@/api/common/httpApiClient';
 
 export default defineComponent({
   name: 'JoinChannelForm',
@@ -34,7 +36,6 @@ export default defineComponent({
     return {
       channelId: '',
       password: '',
-      requirePassword: false,
       isLoading: false,
     };
   },
@@ -44,20 +45,24 @@ export default defineComponent({
       return regex.test(this.channelId);
     },
     isPasswordValid(): boolean {
-      return !this.requirePassword || this.password.length > 0;
+      return this.password.length < 16;
     },
   },
   methods: {
     joiningSharingChannel() {
       this.isLoading = true;
       joinSharingChannel(this.channelId, {
-        password: this.requirePassword ? this.password : null,
+        password: this.password,
       })
       .then((joinSharingChannelResponse) => {
         this.$router.push(`/screen-sharing/${joinSharingChannelResponse.channelId}?guestToken=${joinSharingChannelResponse.guestToken}`);
       })
-      .catch(() => {
-
+      .catch((error: HttpApiError) => {
+        if (error.isUnauthorized()) {
+          alert('Please check the channel password.');
+        } else if (error.isNotFound()) {
+          alert('This channel does not exist.');
+        }
       })
       .finally(() => {
         this.isLoading = false;

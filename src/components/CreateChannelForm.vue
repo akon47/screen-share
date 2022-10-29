@@ -41,7 +41,7 @@ export default defineComponent({
     creatingSharingChannel() {
       this.isLoading = true;
       createSharingChannel({
-        password: this.password ? this.password : null,
+        password: this.password,
       })
       .then((createSharingChannelResponse) => {
         this.$router.push(`/screen-sharing/${createSharingChannelResponse.channelId}?hostToken=${createSharingChannelResponse.hostToken}`);

@@ -184,7 +184,7 @@ class AxiosHttpApiClientImpl implements HttpApiClient {
       async (error: Error | AxiosError<ErrorResponseDto>) => {
         // HttpApiClient를 통하여 호출하는 모든 Api 호출은 HttpApiError 인터페이스의 에러 타입을 반환하도록 처리한다.
         const httpApiError = new AxiosHttpApiErrorImpl(axios.isAxiosError(error) ? error : new AxiosError<ErrorResponseDto>(error.message));
-        alert(httpApiError.getErrorMessage());
+        console.error(httpApiError.getErrorMessage());
         return Promise.reject(httpApiError);
       },
     );
