@@ -65,7 +65,7 @@ pipeline {
                 echo 'Pull Docker Image & Docker Image Run'
                 sshagent(credentials: ['ssh']) {
                     sh "ssh -o StrictHostKeyChecking=no root@10.10.10.120 'docker pull ${IMAGE_NAME}'"
-                    sh "ssh -o StrictHostKeyChecking=no root@10.10.10.120 'docker ps -q -a --filter name=${APP_NAME} | grep -q . && docker rm -f \$(docker ps -aq --filter name=${APP_NAME}) || true'"
+                    sh "ssh -o StrictHostKeyChecking=no root@10.10.10.120 'docker ps -q -a --filter name=^/${APP_NAME}\$ | grep -q . && docker rm -f \$(docker ps -aq --filter name=^/${APP_NAME}\$) || true'"
                     sh "ssh -o StrictHostKeyChecking=no root@10.10.10.120 'docker run -d --restart always --name ${APP_NAME} --net=host ${IMAGE_NAME}'"
                     sh "ssh -o StrictHostKeyChecking=no root@10.10.10.120 'docker images -qf dangling=true | xargs -I{} docker rmi {} || true'"
                     sh "ssh -o StrictHostKeyChecking=no root@10.10.10.120 'docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true'"
