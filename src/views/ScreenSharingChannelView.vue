@@ -1,13 +1,17 @@
 <template>
   <div class="screen-sharing-channel-container">
-    <div id="content-wrapper">
-      <div v-show="!isLoading">
-        <video class="screen-video" ref="video" playsinline autoplay muted/>
-        {{ channelId }}
+    <div class="video-container">
+      <video v-show="!isLoading" ref="video" playsinline autoplay muted/>
+      <div v-show="!isLoading" class="video-footer">
+        <div>{{ channelId }}</div>
+        <div class="footer-buttons">
+          <button @click="partChannel">Exit</button>
+        </div>
       </div>
-      <div v-show="isLoading">
-        Loading...
-      </div>
+      <loading-spinner v-if="isLoading" class="video-loading-spinner"/>
+    </div>
+    <div class="user-container">
+
     </div>
   </div>
 </template>
@@ -17,9 +21,11 @@ import { defineComponent } from 'vue';
 import { joinSharingChannel } from '@/api/sharing';
 import SignalingWebSocketClient from '@/utils/websocket';
 import { HttpApiError } from '@/api/common/httpApiClient';
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 
 export default defineComponent({
   name: 'ScreenSharingChannelView',
+  components: { LoadingSpinner },
   props: {
     channelId: {
       type: String,
@@ -217,6 +223,9 @@ export default defineComponent({
         }
       });
     },
+    async partChannel() {
+      this.$router.push('/');
+    },
   },
   async mounted() {
     if (!this.hostToken && !this.guestToken) {
@@ -251,17 +260,66 @@ export default defineComponent({
 <style scoped>
 
 .screen-sharing-channel-container {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
 
-  justify-items: center;
+  display: grid;
+  grid-template-columns: 1fr 350px;
+}
+
+.video-container {
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+
+  --video-footer-height: 60px;
+
+  display: grid;
+  grid-template-columns: 100%;
+  grid-template-rows: calc(100% - var(--video-footer-height)) var(--video-footer-height);
+}
+
+.video-container video {
+  width: 100%;
+  height: 100%;
+
+  background: #202020;
+}
+
+.video-container button {
+  font-size: 1em;
+  padding: 8px;
+  min-width: 80px;
+}
+
+.video-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 1fr;
+
+  align-items: center;
+  padding: 0 10px;
+}
+
+.video-footer .footer-buttons {
+  display: flex;
   align-items: center;
 }
 
-.screen-video {
-  width: 100%;
-  background: black;
+.user-container {
+  box-shadow: -2px 0px 5px var(--base-shadow-color);
+  position: relative;
+  z-index: 1;
+}
+
+.video-loading-spinner {
+  width: 75px;
+  height: 75px;
+
+  justify-self: center;
+  align-self: center;
+
+  grid-row: 1 / span 2;
 }
 
 </style>
