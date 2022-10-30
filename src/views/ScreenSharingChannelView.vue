@@ -66,19 +66,19 @@ export default defineComponent({
       function createPeerConnection(userId: string): RTCPeerConnection {
         const peerConnection = new RTCPeerConnection(rtcConfiguration);
 
-        let signalingState = `${userId}`;
+        let signalingState = `SignalingState(${userId}): `;
         peerConnection.onsignalingstatechange = () => {
           signalingState += `${peerConnection.signalingState} => `;
           console.log(signalingState);
         };
 
-        let iceConnectionState = `${userId}`;
+        let iceConnectionState = `IceConnectionState(${userId}): `;
         peerConnection.oniceconnectionstatechange = () => {
           iceConnectionState += `${peerConnection.iceConnectionState} => `;
           console.log(iceConnectionState);
         };
 
-        let connectionState = `${userId}`;
+        let connectionState = `ConnectionState(${userId}): `;
         peerConnection.onconnectionstatechange = () => {
           connectionState += `${peerConnection.connectionState} => `;
           console.log(connectionState);
