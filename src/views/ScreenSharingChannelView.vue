@@ -1,11 +1,14 @@
 <template>
   <div class="screen-sharing-channel-container">
-    <div v-show="isLoaded" id="content-wrapper">
-      <div>
+    <div id="content-wrapper">
+      <div v-show="!isLoading">
         <video class="screen-video" ref="video" playsinline autoplay muted/>
+        {{ channelId }}
+      </div>
+      <div v-show="isLoading">
+        Loading...
       </div>
     </div>
-    {{ channelId }}
   </div>
 </template>
 
@@ -41,10 +44,11 @@ export default defineComponent({
   },
   data() {
     return {
+      videoElement: {} as HTMLVideoElement,
       stream: {} as MediaStream,
       rtcPeerConnections: new Map<String, RTCPeerConnection>(),
       signalingWebSocketClient: {} as SignalingWebSocketClient,
-      isLoaded: false,
+      isLoading: false,
     };
   },
   methods: {
@@ -141,9 +145,7 @@ export default defineComponent({
             };
             peer.ontrack = (ev) => {
               this.stream = ev.streams[0];
-
-              const videoElement = this.$refs.video as HTMLVideoElement;
-              videoElement.srcObject = this.stream;
+              this.videoElement.srcObject = this.stream;
             };
             peer.setRemoteDescription(new RTCSessionDescription(sessionDescription));
             peer.createAnswer()
@@ -179,8 +181,7 @@ export default defineComponent({
         return;
       }
 
-      const videoElement = this.$refs.video as HTMLVideoElement;
-      videoElement.srcObject = this.stream;
+      this.videoElement.srcObject = this.stream;
 
       await this.initializeWebSocket(authorizationToken);
     },
@@ -223,15 +224,17 @@ export default defineComponent({
       return;
     }
 
-    try {
-      this.isLoaded = false;
-      if (this.hostToken) {
-        await this.initializeHostMode(this.hostToken);
-      } else if (this.guestToken) {
-        await this.initializeGuestMode(this.guestToken);
-      }
-    } finally {
-      this.isLoaded = true;
+    this.isLoading = true;
+
+    this.videoElement = this.$refs.video as HTMLVideoElement;
+    this.videoElement.onloadeddata = () => {
+      this.isLoading = false;
+    };
+
+    if (this.hostToken) {
+      await this.initializeHostMode(this.hostToken);
+    } else if (this.guestToken) {
+      await this.initializeGuestMode(this.guestToken);
     }
   },
   unmounted() {

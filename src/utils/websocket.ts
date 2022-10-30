@@ -1,4 +1,5 @@
 import { PayloadDto, RelayIceCandidateDto, RelaySessionDescriptionDto } from '@/api/models/sharing.dtos';
+import SockJS from 'sockjs-client';
 
 export default class SignalingWebSocketClient {
   private socket: WebSocket;
@@ -6,7 +7,7 @@ export default class SignalingWebSocketClient {
 
   constructor(authorizationToken: string) {
     this.authorizationToken = authorizationToken;
-    this.socket = new WebSocket(process.env.VUE_APP_WEBSOCKET_URI);
+    this.socket = new SockJS(process.env.VUE_APP_WEBSOCKET_URI);
     this.socket.onopen = () => {
       console.log('onopen');
       this.joinChannel();
