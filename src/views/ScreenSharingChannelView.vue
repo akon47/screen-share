@@ -48,7 +48,7 @@ export default defineComponent({
     };
   },
   methods: {
-    async initializeWebSocket(authorizationToken: String) {
+    async initializeWebSocket(authorizationToken: string) {
       const rtcConfiguration = {
         iceServers: [
           {
@@ -63,11 +63,36 @@ export default defineComponent({
         ],
       };
 
+      function createPeerConnection(userId: string): RTCPeerConnection {
+        const peerConnection = new RTCPeerConnection(rtcConfiguration);
+
+        let signalingState = `${userId}`;
+        peerConnection.onsignalingstatechange = () => {
+          signalingState += `${peerConnection.signalingState} => `;
+          console.log(signalingState);
+        };
+
+        let iceConnectionState = `${userId}`;
+        peerConnection.oniceconnectionstatechange = () => {
+          iceConnectionState += `${peerConnection.iceConnectionState} => `;
+          console.log(iceConnectionState);
+        };
+
+        let connectionState = `${userId}`;
+        peerConnection.onconnectionstatechange = () => {
+          connectionState += `${peerConnection.connectionState} => `;
+          console.log(connectionState);
+        };
+
+        return peerConnection;
+      }
+
       this.signalingWebSocketClient = new SignalingWebSocketClient(authorizationToken);
 
       this.signalingWebSocketClient.onuserjoined = (userId) => {
+        console.log(`onUserJoined: ${userId}`);
         if (this.isHost) {
-          this.rtcPeerConnections.set(userId, new RTCPeerConnection(rtcConfiguration));
+          this.rtcPeerConnections.set(userId, createPeerConnection(userId));
           const peer = this.rtcPeerConnections.get(userId);
           if (peer) {
             peer.onicecandidate = (ev) => {
@@ -86,6 +111,8 @@ export default defineComponent({
       };
 
       this.signalingWebSocketClient.onuserparted = (userId) => {
+        console.log(`onUserParted: ${userId}`);
+
         const peer = this.rtcPeerConnections.get(userId);
         if (peer) {
           if (this.isHost) {
@@ -99,10 +126,12 @@ export default defineComponent({
       };
 
       this.signalingWebSocketClient.onrelaysessiondescription = (userId, sessionDescription) => {
+        console.log(`onRelaySessionDescription: ${userId}`);
+
         if (this.isHost) {
           this.rtcPeerConnections.get(userId)?.setRemoteDescription(new RTCSessionDescription(sessionDescription));
         } else if (this.isGuest) {
-          this.rtcPeerConnections.set(userId, new RTCPeerConnection(rtcConfiguration));
+          this.rtcPeerConnections.set(userId, createPeerConnection(userId));
           const peer = this.rtcPeerConnections.get(userId);
           if (peer) {
             peer.onicecandidate = (ev) => {
@@ -127,10 +156,12 @@ export default defineComponent({
       };
 
       this.signalingWebSocketClient.onrelayicecandidate = (userId, iceCandidate) => {
+        console.log(`onRelayIceCandidate: ${userId}`);
+
         this.rtcPeerConnections.get(userId)?.addIceCandidate(new RTCIceCandidate(iceCandidate));
       };
     },
-    async initializeHostMode(authorizationToken: String) {
+    async initializeHostMode(authorizationToken: string) {
       if (!authorizationToken) {
         return;
       }
@@ -150,7 +181,7 @@ export default defineComponent({
 
       await this.initializeWebSocket(authorizationToken);
     },
-    async initializeGuestMode(authorizationToken: String) {
+    async initializeGuestMode(authorizationToken: string) {
       if (!authorizationToken) {
         return;
       }

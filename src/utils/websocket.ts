@@ -2,9 +2,9 @@ import { PayloadDto, RelayIceCandidateDto, RelaySessionDescriptionDto } from '@/
 
 export default class SignalingWebSocketClient {
   private socket: WebSocket;
-  private readonly authorizationToken: String;
+  private readonly authorizationToken: string;
 
-  constructor(authorizationToken: String) {
+  constructor(authorizationToken: string) {
     this.authorizationToken = authorizationToken;
     this.socket = new WebSocket(process.env.VUE_APP_WEBSOCKET_URI);
     this.socket.onopen = () => {
@@ -52,7 +52,7 @@ export default class SignalingWebSocketClient {
     } as PayloadDto));
   }
 
-  public relaySessionDescription(targetUserId: String, sessionDescription: RTCSessionDescriptionInit) {
+  public relaySessionDescription(targetUserId: string, sessionDescription: RTCSessionDescriptionInit) {
     this.socket.send(JSON.stringify({
       authorizationToken: this.authorizationToken,
       type: 'RELAY_SESSION_DESCRIPTION',
@@ -61,7 +61,7 @@ export default class SignalingWebSocketClient {
     } as RelaySessionDescriptionDto));
   }
 
-  public relayIceCandidate(targetUserId: String, candidate: RTCIceCandidate) {
+  public relayIceCandidate(targetUserId: string, candidate: RTCIceCandidate) {
     this.socket.send(JSON.stringify({
       authorizationToken: this.authorizationToken,
       type: 'RELAY_ICE_CANDIDATE',
@@ -74,8 +74,8 @@ export default class SignalingWebSocketClient {
     this.socket.close();
   }
 
-  public onuserjoined: { (userId: String): void } | undefined;
-  public onuserparted: { (userId: String): void } | undefined;
-  public onrelaysessiondescription: { (userId: String, sessionDescription: RTCSessionDescriptionInit): void } | undefined;
-  public onrelayicecandidate: { (userId: String, iceCandidate: RTCIceCandidateInit): void } | undefined;
+  public onuserjoined: { (userId: string): void } | undefined;
+  public onuserparted: { (userId: string): void } | undefined;
+  public onrelaysessiondescription: { (userId: string, sessionDescription: RTCSessionDescriptionInit): void } | undefined;
+  public onrelayicecandidate: { (userId: string, iceCandidate: RTCIceCandidateInit): void } | undefined;
 }
