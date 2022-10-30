@@ -7,12 +7,15 @@
   --hover-color: rgba(0, 0, 0, 0.1);
   --border-color: #e0e0e0;
   --base-color: #505050;
-  --base-shadow-color: rgba(0, 0, 0, .1);
+  --base-shadow-color: rgba(0, 0, 0, .2);
   --link-accent-color: #218bff;
   --button-color: #ffffff;
   --button-hover-color: #e0e0e0;
 
   --base-border-radius: 5px;
+
+  --header-height: 70px;
+  --footer-height: 80px;
 
   --theme-changed-transition: 0.2s;
   --base-font-family: 'Noto Sans KR', sans-serif;
@@ -27,7 +30,7 @@
   --hover-color: rgba(255, 255, 255, 0.1);
   --border-color: #303030;
   --base-color: #f0f0f0;
-  --base-shadow-color: rgba(255, 255, 255, .1);
+  --base-shadow-color: rgba(0, 0, 0, .35);
   --link-accent-color: #539bf5;
   --button-color: #101010;
   --button-hover-color: #202020;
@@ -132,25 +135,21 @@ button:disabled {
 #app > .header {
   background-color: var(--header-background-color);
   box-shadow: 0px 1px 5px var(--base-shadow-color);
-  height: 70px;
+  height: var(--header-height);
+  position: relative;
+  z-index: 1000;
 }
 
 #app > .content {
-  height: calc(100vh - 70px - 80px);
+  height: calc(100vh - var(--header-height) - var(--footer-height));
 }
 
 #app > .footer {
   background-color: var(--footer-background-color);
   box-shadow: 0px -2px 2px var(--base-shadow-color);
-  height: 80px;
-}
-
-#content-wrapper {
-  box-sizing: border-box;
-  border-radius: var(--base-border-radius);
-  padding: 20px;
-  background: var(--content-background-color);
-  box-shadow: 0 0 11px var(--base-shadow-color);
+  height: var(--footer-height);
+  position: relative;
+  z-index: 1000;
 }
 
 .form-container {
@@ -177,7 +176,6 @@ button:disabled {
   box-sizing: border-box;
 
   row-gap: 10px;
-
   width: 400px;
 }
 

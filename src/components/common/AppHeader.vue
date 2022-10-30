@@ -38,7 +38,7 @@ export default defineComponent({
 <style scoped>
 .header-container {
   display: grid;
-  grid-template-columns: auto minmax(auto, 1000px);
+  grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: 1fr;
   padding: 5px 20px;
   box-sizing: border-box;

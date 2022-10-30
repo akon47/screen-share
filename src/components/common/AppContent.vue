@@ -1,11 +1,9 @@
 <template>
-  <div class="content-container">
-    <router-view v-slot="{ Component }" :key="$route.fullPath">
-      <transition name="component-fade" mode="out-in">
-        <component :is="Component" class="content-item"/>
-      </transition>
-    </router-view>
-  </div>
+  <router-view v-slot="{ Component }" :key="$route.fullPath">
+    <transition name="component-fade" mode="out-in">
+      <component :is="Component" class="content-item"/>
+    </transition>
+  </router-view>
 </template>
 
 <script lang="ts">
@@ -17,16 +15,6 @@ export default defineComponent({
 </script>
 
 <style scoped>
-
-.content-container {
-  display: grid;
-  grid-template-columns: minmax(0, 1400px);
-  grid-template-rows: 1fr;
-  justify-content: center;
-  box-sizing: border-box;
-  padding: 20px;
-  height: 100%;
-}
 
 .component-fade-enter-active,
 .component-fade-leave-active {
