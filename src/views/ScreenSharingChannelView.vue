@@ -158,7 +158,10 @@ export default defineComponent({
       this.signalingWebSocketClient.onrelayicecandidate = (userId, iceCandidate) => {
         console.log(`onRelayIceCandidate: ${userId}`);
 
-        this.rtcPeerConnections.get(userId)?.addIceCandidate(new RTCIceCandidate(iceCandidate));
+        this.rtcPeerConnections.get(userId)?.addIceCandidate(new RTCIceCandidate(iceCandidate))
+        .catch((error) => {
+          alert(error);
+        });
       };
     },
     async initializeHostMode(authorizationToken: string) {
