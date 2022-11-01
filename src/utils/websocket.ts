@@ -1,4 +1,9 @@
-import { PayloadDto, RelayIceCandidateDto, RelaySessionDescriptionDto } from '@/api/models/sharing.dtos';
+import {
+  PayloadDto,
+  RelayIceCandidateDto,
+  RelaySessionDescriptionDto,
+  SimpleMessageDto,
+} from '@/api/models/sharing.dtos';
 import SockJS from 'sockjs-client';
 
 export default class SignalingWebSocketClient {
@@ -42,6 +47,11 @@ export default class SignalingWebSocketClient {
             this.onrelayicecandidate(payload.userId, payload.iceCandidate);
           }
           break;
+        case 'NEW_MESSAGE':
+          if (this.onnewmessage) {
+            this.onnewmessage(payload.message);
+          }
+          break;
       }
     };
   }
@@ -79,4 +89,5 @@ export default class SignalingWebSocketClient {
   public onuserparted: { (userId: string): void } | undefined;
   public onrelaysessiondescription: { (userId: string, sessionDescription: RTCSessionDescriptionInit): void } | undefined;
   public onrelayicecandidate: { (userId: string, iceCandidate: RTCIceCandidateInit): void } | undefined;
+  public onnewmessage: { (message: SimpleMessageDto): void } | undefined;
 }
