@@ -1,10 +1,11 @@
 import { sharingV1 } from './index';
 import {
+  CreateMessageRequestDto,
   CreateSharingChannelRequestDto,
   CreateSharingChannelResponseDto,
-  JoinSharingChannelRequestDto, JoinSharingChannelResponseDto,
+  JoinSharingChannelRequestDto, JoinSharingChannelResponseDto, SimpleMessageDto,
 } from '@/api/models/sharing.dtos';
-import DataTransferObject from '@/api/models/common.dtos';
+import DataTransferObject, { SliceDto } from '@/api/models/common.dtos';
 
 // Create New Sharing Channel
 function createSharingChannel(createSharingChannelRequestDto: CreateSharingChannelRequestDto) {
@@ -14,11 +15,30 @@ function createSharingChannel(createSharingChannelRequestDto: CreateSharingChann
 // Join Sharing Channel
 function joinSharingChannel(channelId: String, joinSharingChannelRequestDto: JoinSharingChannelRequestDto) {
   return sharingV1.postRequest<JoinSharingChannelResponseDto>(`/channels/${channelId}/join`, {
-    channelId: channelId
+    channelId: channelId,
   }, joinSharingChannelRequestDto);
+}
+
+// Get Channel Messages
+function getChannelMessages(channelId: string, size: number, cursorId: string | null = null) {
+  return sharingV1.getRequest<SliceDto<SimpleMessageDto>>(`/channels/${channelId}/messages`, {
+    cursorId: cursorId,
+    size: size,
+  });
+}
+
+// Write Message
+function createMessage(authorizationToken: string, channelId: string, message: string) {
+  return sharingV1.postRequest<SimpleMessageDto>(`/channels/${channelId}/messages`, null, {
+    message: message,
+  } as CreateMessageRequestDto, {
+    Authorization: authorizationToken
+  });
 }
 
 export {
   createSharingChannel,
-  joinSharingChannel
+  joinSharingChannel,
+  createMessage,
+  getChannelMessages,
 };

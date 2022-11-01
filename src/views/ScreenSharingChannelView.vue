@@ -11,7 +11,7 @@
       <loading-spinner v-if="isLoading" class="video-loading-spinner"/>
     </div>
     <div class="user-container">
-
+      <message-form :token="token" :channel-id="channelId" :new-simple-message="newSimpleMessage"/>
     </div>
   </div>
 </template>
@@ -22,10 +22,12 @@ import { joinSharingChannel } from '@/api/sharing';
 import SignalingWebSocketClient from '@/utils/websocket';
 import { HttpApiError } from '@/api/common/httpApiClient';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import MessageForm from '@/components/MessageForm.vue';
+import { SimpleMessageDto } from '@/api/models/sharing.dtos';
 
 export default defineComponent({
   name: 'ScreenSharingChannelView',
-  components: { LoadingSpinner },
+  components: { MessageForm, LoadingSpinner },
   props: {
     channelId: {
       type: String,
@@ -47,6 +49,9 @@ export default defineComponent({
     isGuest() {
       return this.guestToken ? true : false;
     },
+    token() {
+      return this.hostToken ?? this.guestToken ?? '';
+    },
   },
   data() {
     return {
@@ -54,6 +59,7 @@ export default defineComponent({
       stream: {} as MediaStream,
       rtcPeerConnections: new Map<String, RTCPeerConnection>(),
       signalingWebSocketClient: {} as SignalingWebSocketClient,
+      newSimpleMessage: {} as SimpleMessageDto,
       isLoading: false,
     };
   },
@@ -170,6 +176,10 @@ export default defineComponent({
         .catch((error) => {
           alert(error);
         });
+      };
+
+      this.signalingWebSocketClient.onnewmessage = (simpleMessage) => {
+        this.newSimpleMessage = simpleMessage;
       };
     },
     async initializeHostMode(authorizationToken: string) {

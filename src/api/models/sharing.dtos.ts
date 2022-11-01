@@ -32,12 +32,32 @@ export interface JoinSharingChannelResponseDto extends DataTransferObject {
   readonly guestToken: string;
 }
 
+// dto for write message
+export interface CreateMessageRequestDto extends DataTransferObject {
+  // message
+  readonly message: string;
+}
+
+// dto for simple message
+export interface SimpleMessageDto extends DataTransferObject {
+  // message id
+  readonly id: string;
+  // message
+  readonly message: string;
+  // author id
+  readonly authorId: string;
+  // created at
+  readonly createdAt: Date;
+  // last modified at
+  readonly lastModifiedAt: Date;
+}
+
 // dto for websocket
 export interface PayloadDto extends DataTransferObject {
   // authorization token
   readonly authorizationToken: string;
   // payload type
-  readonly type: 'JOIN_CHANNEL' | 'PART_CHANNEL' | 'RELAY_SESSION_DESCRIPTION' | 'RELAY_ICE_CANDIDATE' | 'JOIN_USER' | 'PART_USER';
+  readonly type: 'JOIN_CHANNEL' | 'PART_CHANNEL' | 'RELAY_SESSION_DESCRIPTION' | 'RELAY_ICE_CANDIDATE' | 'JOIN_USER' | 'PART_USER' | 'NEW_MESSAGE';
 }
 
 // dto for websocket relay session description
@@ -54,4 +74,10 @@ export interface RelayIceCandidateDto extends DataTransferObject, PayloadDto {
   readonly userId: string;
   // ice candidate
   readonly iceCandidate: any;
+}
+
+// dto for websocket new message
+export interface NewMessageDto extends DataTransferObject, PayloadDto {
+  // ice candidate
+  readonly message: SimpleMessageDto;
 }
