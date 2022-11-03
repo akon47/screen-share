@@ -7,7 +7,7 @@
   <img alt="GitHub starts" src="https://img.shields.io/github/stars/akon47/screen-share">
 </p>
 
-This is a project where you can easily share your screen.
+This is a frontend project for easily share your screen.
 
 ![image](https://user-images.githubusercontent.com/49547202/198860631-a11e2db2-38c0-40d8-a5bc-40a08e2bf335.png)
 
