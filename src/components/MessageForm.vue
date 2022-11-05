@@ -1,6 +1,10 @@
 <template>
   <div class="message-form-container">
-    <div class="message-list-container" ref="message-list">
+    <div class="message-list-container" ref="message-list" @scroll="handleScroll">
+      <observer-trigger
+          v-if="!isNoMorePage && !isLoading"
+          class="observer-trigger-enable"
+          v-on:trigger="loadMoreMessages"/>
       <message-item v-for="(message, index) in messages" :key="message.id"
                     :simple-message="message"
                     :previous-simple-message="messages[index - 1]"/>
@@ -19,10 +23,11 @@ import { createMessage, getChannelMessages } from '@/api/sharing';
 import { HttpApiError } from '@/api/common/httpApiClient';
 import { SimpleMessageDto } from '@/api/models/sharing.dtos';
 import MessageItem from '@/components/MessageItem.vue';
+import ObserverTrigger from '@/components/common/ObserverTrigger.vue';
 
 export default defineComponent({
   name: 'MessageForm',
-  components: { MessageItem },
+  components: { ObserverTrigger, MessageItem },
   props: {
     token: {
       type: String,
@@ -46,6 +51,7 @@ export default defineComponent({
       simpleMessages: Array<SimpleMessageDto>(),
       cursorId: '',
       isNoMorePage: true,
+      isScrollEnd: true,
     };
   },
   watch: {
@@ -55,11 +61,16 @@ export default defineComponent({
       }
     },
     messages() {
-      this.$nextTick(() => this.messageScrollToBottom());
+      if (this.isScrollEnd) {
+        this.$nextTick(() => this.messageScrollToBottom(this.isLoading ? 'auto' : 'smooth'));
+      }
     },
   },
   methods: {
     async writeMessage() {
+      if (!this.message)
+        return;
+
       await createMessage(this.token, this.channelId, this.message)
       .then(() => {
         this.message = '';
@@ -68,10 +79,10 @@ export default defineComponent({
         alert(error.getErrorMessage());
       });
     },
-    async fetchMessages(cursorId: string | null = null) {
+    async fetchMessages(cursorId: string | null = null, size: number = 50) {
       try {
         this.isLoading = true;
-        await getChannelMessages(this.channelId, 50, cursorId)
+        await getChannelMessages(this.channelId, size, cursorId)
         .then(async (messages) => {
           if (messages.first) {
             this.simpleMessages = messages.data;
@@ -90,14 +101,23 @@ export default defineComponent({
         this.isLoading = false;
       }
     },
-    messageScrollToBottom() {
+    async loadMoreMessages() {
+      if (this.cursorId) {
+        await this.fetchMessages(this.cursorId, 10);
+      }
+    },
+    messageScrollToBottom(scrollBehavior: 'auto' | 'smooth' = 'auto') {
       const messageList = this.$refs['message-list'] as HTMLDivElement;
       if (messageList) {
         messageList.scrollTo({
           top: messageList.scrollHeight,
-          behavior: 'auto',
+          behavior: scrollBehavior,
         });
       }
+    },
+    handleScroll(e: Event) {
+      const { scrollTop, offsetHeight, scrollHeight } = e.target as HTMLDivElement;
+      this.isScrollEnd = scrollTop + offsetHeight >= scrollHeight;
     },
   },
   mounted() {

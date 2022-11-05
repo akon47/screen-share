@@ -54,7 +54,7 @@ export default defineComponent({
 <style scoped>
 
 .message-item-container {
-  display: inline-grid;
+  display: grid;
   grid-template-rows: auto auto;
   grid-template-columns: 1fr;
 }
@@ -62,6 +62,7 @@ export default defineComponent({
 .message-item-container .message-header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-end;
 
   font-size: 0.75em;
 
@@ -69,7 +70,8 @@ export default defineComponent({
 }
 
 .message-header .identifier {
-  overflow: hidden;
+  font-size: 1rem;
+  font-weight: bold;
 }
 
 .message-item-container .message {
