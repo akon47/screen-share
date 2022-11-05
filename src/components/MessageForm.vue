@@ -1,7 +1,9 @@
 <template>
   <div class="message-form-container">
-    <div class="message-list-container">
-      <message-item v-for="message in simpleMessages.slice().reverse()" :key="message.id" :simple-message="message"/>
+    <div class="message-list-container" ref="message-list">
+      <message-item v-for="(message, index) in messages" :key="message.id"
+                    :simple-message="message"
+                    :previous-simple-message="messages[index - 1]"/>
     </div>
     <textarea placeholder="Type message here..."
               :disabled="isLoading"
@@ -32,6 +34,11 @@ export default defineComponent({
     },
     newSimpleMessage: {} as PropType<SimpleMessageDto>,
   },
+  computed: {
+    messages() {
+      return this.simpleMessages.slice().reverse();
+    },
+  },
   data() {
     return {
       isLoading: false,
@@ -43,10 +50,13 @@ export default defineComponent({
   },
   watch: {
     newSimpleMessage(newValue) {
-      if(newValue) {
+      if (newValue) {
         this.simpleMessages.unshift(newValue);
       }
-    }
+    },
+    messages() {
+      this.$nextTick(() => this.messageScrollToBottom());
+    },
   },
   methods: {
     async writeMessage() {
@@ -78,6 +88,15 @@ export default defineComponent({
         });
       } finally {
         this.isLoading = false;
+      }
+    },
+    messageScrollToBottom() {
+      const messageList = this.$refs['message-list'] as HTMLDivElement;
+      if (messageList) {
+        messageList.scrollTo({
+          top: messageList.scrollHeight,
+          behavior: 'auto',
+        });
       }
     },
   },
@@ -118,6 +137,9 @@ export default defineComponent({
   display: flex;
   flex-direction: column;
   overflow-y: scroll;
+  overflow-x: hidden;
+
+  padding: 12px;
 
   height: calc(100vh - var(--header-height) - var(--footer-height) - 100px);
 }
