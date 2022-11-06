@@ -2,9 +2,13 @@
   <div class="footer-container">
 
     <div class="metas">
-      <span>Copyright © 2022. 김환(Kim,Hwan) all rights reserved.</span>
+      <div class="links">
+        <a href="https://github.com/akon47/screen-share">
+          <img src="https://img.shields.io/badge/GitHub-Repository-red?style=flat&logo=github"/>
+        </a>
+      </div>
       <div class="counter">
-        <img src="https://counter.kimhwan.kr?key=screenshare.kimhwan.kr" />
+        <img src="https://counter.kimhwan.kr?key=screenshare.kimhwan.kr"/>
       </div>
     </div>
   </div>
@@ -34,6 +38,16 @@ export default defineComponent({
   font-size: 12px;
 
   row-gap: 10px;
+}
+
+.metas > .links {
+  display: grid;
+  grid-auto-columns: auto;
+  grid-template-rows: auto;
+
+  grid-auto-flow: column;
+
+  grid-column-gap: 5px;
 }
 
 .metas > .counter {
