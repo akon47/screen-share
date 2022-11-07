@@ -9,7 +9,7 @@
 
 This is a frontend project for easily share your screen.
 
-![image](https://user-images.githubusercontent.com/49547202/198860631-a11e2db2-38c0-40d8-a5bc-40a08e2bf335.png)
+![screenshare kimhwan kr_screen-sharing](https://user-images.githubusercontent.com/49547202/200319187-034b1193-d5a9-4563-bffc-92dc956d0c36.png)
 
 ## 📃 Usage
 - If you want to share your screen with others, click the New Sharing button to start.
