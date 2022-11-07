@@ -3,7 +3,9 @@
     <div class="video-container">
       <video v-show="!isLoading" ref="video" playsinline autoplay muted/>
       <div v-show="!isLoading" class="video-footer">
-        <div>{{ channelId }}</div>
+        <div>
+          <button @click="copyShareLink">Copy Share Link</button>
+        </div>
         <div class="footer-buttons">
           <button @click="partChannel">Exit</button>
         </div>
@@ -135,7 +137,7 @@ export default defineComponent({
             peer.close();
             this.rtcPeerConnections.delete(userId);
           } else if (this.isGuest) {
-            alert('호스트와 연결이 끊어졌습니다.');
+            alert('Disconnected from host.');
             this.$router.push('/');
           }
         }
@@ -174,7 +176,7 @@ export default defineComponent({
 
         this.rtcPeerConnections.get(userId)?.addIceCandidate(new RTCIceCandidate(iceCandidate))
         .catch((error) => {
-          alert(error);
+          console.error(error);
         });
       };
 
@@ -217,8 +219,7 @@ export default defineComponent({
       })
       .catch(async (error: HttpApiError) => {
         if (error.isUnauthorized()) {
-          alert('Please check the channel password.');
-
+          this.$toast.error('Please check the channel password.');
           const password = prompt('Please enter the sharing channel password.');
           if (password) {
             await this.joinChannel(channelId, password);
@@ -226,7 +227,7 @@ export default defineComponent({
             this.$router.push('/');
           }
         } else if (error.isNotFound()) {
-          alert('This channel does not exist.');
+          this.$toast.error('This channel does not exist.');
           this.$router.push('/');
         } else {
           this.$router.push('/');
@@ -235,6 +236,10 @@ export default defineComponent({
     },
     async partChannel() {
       this.$router.push('/');
+    },
+    copyShareLink() {
+      navigator.clipboard.writeText(`${process.env.VUE_APP_BASE_URI}/screen-sharing/${this.channelId}`);
+      this.$toast.success("The link has been copied to the clipboard.");
     },
   },
   async mounted() {

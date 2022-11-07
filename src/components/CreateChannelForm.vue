@@ -4,6 +4,7 @@
       <div class="form-title">New Sharing</div>
       <div>
         <input :class="{'invalid': password && !isPasswordValid}"
+               :disabled="isLoading"
                type="text" id="channel-password" v-model="password" placeholder="Sharing Channel Password" maxlength="16"/>
       </div>
       <button :disabled="!isPasswordValid || isLoading"
@@ -23,6 +24,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { createSharingChannel } from '@/api/sharing';
+import { HttpApiError } from '@/api/common/httpApiClient';
 
 export default defineComponent({
   name: 'CreateChannelForm',
@@ -45,6 +47,9 @@ export default defineComponent({
       })
       .then((createSharingChannelResponse) => {
         this.$router.push(`/screen-sharing/${createSharingChannelResponse.channelId}?hostToken=${createSharingChannelResponse.hostToken}`);
+      })
+      .catch((error: HttpApiError) => {
+        this.$toast.error(error.getErrorMessage());
       })
       .finally(() => {
         this.isLoading = false;

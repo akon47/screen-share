@@ -59,9 +59,9 @@ export default defineComponent({
       })
       .catch((error: HttpApiError) => {
         if (error.isUnauthorized()) {
-          alert('Please check the channel password.');
+          this.$toast.error('Please check the channel password.');
         } else if (error.isNotFound()) {
-          alert('This channel does not exist.');
+          this.$toast.error('This channel does not exist.');
         }
       })
       .finally(() => {

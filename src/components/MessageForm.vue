@@ -76,7 +76,7 @@ export default defineComponent({
         this.message = '';
       })
       .catch((error: HttpApiError) => {
-        alert(error.getErrorMessage());
+        this.$toast.error(error.getErrorMessage());
       });
     },
     async fetchMessages(cursorId: string | null = null, size: number = 50) {
@@ -95,7 +95,7 @@ export default defineComponent({
           this.isNoMorePage = messages.last;
         })
         .catch((error: HttpApiError) => {
-          alert(error.getErrorMessage());
+          this.$toast.error(error.getErrorMessage());
         });
       } finally {
         this.isLoading = false;
