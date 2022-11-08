@@ -1,11 +1,12 @@
 import { sharingV1 } from './index';
 import {
+  ChannelUserDto,
   CreateMessageRequestDto,
   CreateSharingChannelRequestDto,
   CreateSharingChannelResponseDto,
   JoinSharingChannelRequestDto, JoinSharingChannelResponseDto, SimpleMessageDto,
 } from '@/api/models/sharing.dtos';
-import DataTransferObject, { SliceDto } from '@/api/models/common.dtos';
+import DataTransferObject, { CollectionDto, SliceDto } from '@/api/models/common.dtos';
 
 // Create New Sharing Channel
 function createSharingChannel(createSharingChannelRequestDto: CreateSharingChannelRequestDto) {
@@ -32,7 +33,14 @@ function createMessage(authorizationToken: string, channelId: string, message: s
   return sharingV1.postRequest<SimpleMessageDto>(`/channels/${channelId}/messages`, null, {
     message: message,
   } as CreateMessageRequestDto, {
-    Authorization: authorizationToken
+    Authorization: authorizationToken,
+  });
+}
+
+// Get Channel Users
+function getChannelUsers(authorizationToken: string, channelId: string) {
+  return sharingV1.getRequest<CollectionDto<ChannelUserDto>>(`/channels/${channelId}/users`, null, {
+    Authorization: authorizationToken,
   });
 }
 
@@ -41,4 +49,5 @@ export {
   joinSharingChannel,
   createMessage,
   getChannelMessages,
+  getChannelUsers,
 };

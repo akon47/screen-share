@@ -25,3 +25,11 @@ export interface SliceDto<T extends DataTransferObject> extends DataTransferObje
   // 다음 페이지 조회를 위한 커서 Id
   readonly cursorId: string | null;
 }
+
+// Collection Dto
+export interface CollectionDto<T extends DataTransferObject> extends DataTransferObject {
+  // 조회된 데이터
+  readonly data: Array<T>;
+  // 조회된 데이터 수
+  readonly size: number;
+}

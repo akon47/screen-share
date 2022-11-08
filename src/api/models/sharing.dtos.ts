@@ -52,6 +52,14 @@ export interface SimpleMessageDto extends DataTransferObject {
   readonly lastModifiedAt: Date;
 }
 
+// dto for channel user
+export interface ChannelUserDto extends DataTransferObject {
+  // user id
+  readonly id: string;
+  // role type
+  readonly roleType: 'ROLE_GUEST' | 'ROLE_HOST';
+}
+
 // dto for websocket
 export interface PayloadDto extends DataTransferObject {
   // authorization token
@@ -78,6 +86,6 @@ export interface RelayIceCandidateDto extends DataTransferObject, PayloadDto {
 
 // dto for websocket new message
 export interface NewMessageDto extends DataTransferObject, PayloadDto {
-  // ice candidate
+  // message
   readonly message: SimpleMessageDto;
 }
