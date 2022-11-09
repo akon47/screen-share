@@ -131,12 +131,12 @@ export default defineComponent({
 .message-form-container {
   display: grid;
 
-  grid-template-rows: auto 1fr;
+  grid-template-rows: minmax(0, 1fr) 100px;
 
   align-content: stretch;
   justify-content: stretch;
 
-  background: var(--background-color);
+  background: var(--content-background-color);
 
   width: 100%;
   height: 100%;
@@ -151,6 +151,9 @@ export default defineComponent({
   border: 1px solid var(--border-color);
   outline: none;
   resize: none;
+
+  width: 100%;
+  height: 100%;
 }
 
 .message-form-container .message-list-container {
@@ -158,10 +161,13 @@ export default defineComponent({
   flex-direction: column;
   overflow-y: scroll;
   overflow-x: hidden;
+  box-sizing: border-box;
 
   padding: 12px;
 
-  height: calc(100vh - var(--header-height) - var(--footer-height) - 100px);
+  width: 100%;
+  height: 100%;
+
 }
 
 </style>

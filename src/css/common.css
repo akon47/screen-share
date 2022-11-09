@@ -16,6 +16,8 @@
 
   --header-height: 70px;
   --footer-height: 80px;
+  --user-list-height: 200px;
+  --message-list-height: calc(100vh - var(--header-height) - var(--footer-height) - var(--user-list-height));
 
   --theme-changed-transition: 0.2s;
   --base-font-family: 'Noto Sans KR', sans-serif;
@@ -83,8 +85,8 @@ body {
   transition: var(--theme-changed-transition);
   font-family: var(--base-font-family);
   color: var(--base-color);
-
-  overflow-x: hidden;
+  overflow: hidden;
+  height: 100vh;
 }
 
 strong, b {

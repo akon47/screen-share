@@ -75,10 +75,10 @@ export default defineComponent({
 }
 
 .message-item-container .message {
-  padding: 3px 6px;
+  padding: 3px 10px 5px 10px;
   margin-top: 6px;
-  border-radius: 5px;
-  background: var(--content-background-color);
+  border-radius: 2px;
+  background: var(--background-color);
 
   word-break: break-all;
   word-wrap: break-word;
