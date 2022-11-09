@@ -1,4 +1,5 @@
 import {
+  ChannelUserDto,
   PayloadDto,
   RelayIceCandidateDto,
   RelaySessionDescriptionDto,
@@ -29,12 +30,12 @@ export default class SignalingWebSocketClient {
       switch (payload.type) {
         case 'JOIN_USER':
           if (this.onuserjoined) {
-            this.onuserjoined(payload.userId);
+            this.onuserjoined(payload.user);
           }
           break;
         case 'PART_USER':
           if (this.onuserparted) {
-            this.onuserparted(payload.userId);
+            this.onuserparted(payload.user);
           }
           break;
         case 'RELAY_SESSION_DESCRIPTION':
@@ -85,8 +86,8 @@ export default class SignalingWebSocketClient {
     this.socket.close();
   }
 
-  public onuserjoined: { (userId: string): void } | undefined;
-  public onuserparted: { (userId: string): void } | undefined;
+  public onuserjoined: { (user: ChannelUserDto): void } | undefined;
+  public onuserparted: { (user: ChannelUserDto): void } | undefined;
   public onrelaysessiondescription: { (userId: string, sessionDescription: RTCSessionDescriptionInit): void } | undefined;
   public onrelayicecandidate: { (userId: string, iceCandidate: RTCIceCandidateInit): void } | undefined;
   public onnewmessage: { (message: SimpleMessageDto): void } | undefined;

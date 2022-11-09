@@ -12,7 +12,8 @@
       </div>
       <loading-spinner v-if="isLoading" class="video-loading-spinner"/>
     </div>
-    <div class="user-container">
+    <div v-if="!isLoading" class="user-container">
+      <user-form class="user-form" :token="token" :channel-id="channelId" :update-key="userUpdateKey"/>
       <message-form :token="token" :channel-id="channelId" :new-simple-message="newSimpleMessage"/>
     </div>
   </div>
@@ -26,10 +27,11 @@ import { HttpApiError } from '@/api/common/httpApiClient';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 import MessageForm from '@/components/MessageForm.vue';
 import { SimpleMessageDto } from '@/api/models/sharing.dtos';
+import UserForm from '@/components/UserForm.vue';
 
 export default defineComponent({
   name: 'ScreenSharingChannelView',
-  components: { MessageForm, LoadingSpinner },
+  components: { UserForm, MessageForm, LoadingSpinner },
   props: {
     channelId: {
       type: String,
@@ -62,6 +64,7 @@ export default defineComponent({
       rtcPeerConnections: new Map<String, RTCPeerConnection>(),
       signalingWebSocketClient: {} as SignalingWebSocketClient,
       newSimpleMessage: {} as SimpleMessageDto,
+      userUpdateKey: {},
       isLoading: false,
     };
   },
@@ -107,40 +110,43 @@ export default defineComponent({
 
       this.signalingWebSocketClient = new SignalingWebSocketClient(authorizationToken);
 
-      this.signalingWebSocketClient.onuserjoined = (userId) => {
-        console.log(`onUserJoined: ${userId}`);
+      this.signalingWebSocketClient.onuserjoined = (user) => {
+        console.log(`onUserJoined: ${user.id}`);
         if (this.isHost) {
-          this.rtcPeerConnections.set(userId, createPeerConnection(userId));
-          const peer = this.rtcPeerConnections.get(userId);
+          this.rtcPeerConnections.set(user.id, createPeerConnection(user.id));
+          const peer = this.rtcPeerConnections.get(user.id);
           if (peer) {
             peer.onicecandidate = (ev) => {
               if (ev.candidate) {
-                this.signalingWebSocketClient.relayIceCandidate(userId, ev.candidate);
+                this.signalingWebSocketClient.relayIceCandidate(user.id, ev.candidate);
               }
             };
             this.stream.getTracks().forEach((track) => peer.addTrack(track, this.stream));
             peer.createOffer()
             .then((offer) => {
               peer.setLocalDescription(offer);
-              this.signalingWebSocketClient.relaySessionDescription(userId, offer);
+              this.signalingWebSocketClient.relaySessionDescription(user.id, offer);
             });
           }
         }
+        this.userUpdateKey = {};
       };
 
-      this.signalingWebSocketClient.onuserparted = (userId) => {
-        console.log(`onUserParted: ${userId}`);
+      this.signalingWebSocketClient.onuserparted = (user) => {
+        console.log(`onUserParted: ${user.id}`);
 
-        const peer = this.rtcPeerConnections.get(userId);
+        const peer = this.rtcPeerConnections.get(user.id);
         if (peer) {
           if (this.isHost) {
             peer.close();
-            this.rtcPeerConnections.delete(userId);
+            this.rtcPeerConnections.delete(user.id);
           } else if (this.isGuest) {
             alert('Disconnected from host.');
             this.$router.push('/');
           }
         }
+
+        this.userUpdateKey = {};
       };
 
       this.signalingWebSocketClient.onrelaysessiondescription = (userId, sessionDescription) => {
@@ -239,7 +245,7 @@ export default defineComponent({
     },
     copyShareLink() {
       navigator.clipboard.writeText(`${process.env.VUE_APP_BASE_URI}/screen-sharing/${this.channelId}`);
-      this.$toast.success("The link has been copied to the clipboard.");
+      this.$toast.success('The link has been copied to the clipboard.');
     },
   },
   async mounted() {
@@ -325,6 +331,10 @@ export default defineComponent({
   box-shadow: -2px 0px 5px var(--base-shadow-color);
   position: relative;
   z-index: 1;
+  height: 100%;
+
+  display: grid;
+  grid-template-rows: var(--user-list-height) var(--message-list-height);
 }
 
 .video-loading-spinner {
