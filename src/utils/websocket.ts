@@ -53,6 +53,11 @@ export default class SignalingWebSocketClient {
             this.onnewmessage(payload.message);
           }
           break;
+        case 'CHANNEL_JOINED':
+          if (this.onchanneljoined) {
+            this.onchanneljoined(payload.user);
+          }
+          break;
       }
     };
   }
@@ -91,4 +96,6 @@ export default class SignalingWebSocketClient {
   public onrelaysessiondescription: { (userId: string, sessionDescription: RTCSessionDescriptionInit): void } | undefined;
   public onrelayicecandidate: { (userId: string, iceCandidate: RTCIceCandidateInit): void } | undefined;
   public onnewmessage: { (message: SimpleMessageDto): void } | undefined;
+
+  public onchanneljoined: { (user: ChannelUserDto): void } | undefined;
 }

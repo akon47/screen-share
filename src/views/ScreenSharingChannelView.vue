@@ -12,7 +12,7 @@
       </div>
       <loading-spinner v-if="isLoading" class="video-loading-spinner"/>
     </div>
-    <div v-if="!isLoading" class="user-container">
+    <div v-if="isJoined" class="user-container">
       <user-form class="user-form" :token="token" :channel-id="channelId" :update-key="userUpdateKey"/>
       <message-form :token="token" :channel-id="channelId" :new-simple-message="newSimpleMessage"/>
     </div>
@@ -66,6 +66,7 @@ export default defineComponent({
       newSimpleMessage: {} as SimpleMessageDto,
       userUpdateKey: {},
       isLoading: false,
+      isJoined: false,
     };
   },
   methods: {
@@ -109,6 +110,10 @@ export default defineComponent({
       }
 
       this.signalingWebSocketClient = new SignalingWebSocketClient(authorizationToken);
+
+      this.signalingWebSocketClient.onchanneljoined = () => {
+        this.isJoined = true;
+      };
 
       this.signalingWebSocketClient.onuserjoined = (user) => {
         console.log(`onUserJoined: ${user.id}`);
