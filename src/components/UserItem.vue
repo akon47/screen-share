@@ -18,7 +18,7 @@ export default defineComponent({
   },
   computed: {
     isHost(): boolean {
-      return this.user?.roleType === 'ROLE_HOST';
+      return this.user?.roleType === 'HOST';
     },
     identifier() {
       // Prefer the nickname, fall back to the short id segment.

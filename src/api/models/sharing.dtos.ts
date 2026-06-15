@@ -88,8 +88,8 @@ export interface SimpleMessageDto extends DataTransferObject {
 export interface ChannelUserDto extends DataTransferObject {
   // user id
   readonly id: string;
-  // role type
-  readonly roleType: 'ROLE_GUEST' | 'ROLE_HOST';
+  // role type (serialized from the server enum name)
+  readonly roleType: 'GUEST' | 'HOST' | 'UNKNOWN';
   // user nickname
   readonly nickname?: string | null;
 }
