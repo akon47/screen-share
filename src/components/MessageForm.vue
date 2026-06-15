@@ -21,7 +21,7 @@
 import { defineComponent, PropType } from 'vue';
 import { createMessage, getChannelMessages } from '@/api/sharing';
 import { HttpApiError } from '@/api/common/httpApiClient';
-import { SimpleMessageDto } from '@/api/models/sharing.dtos';
+import { ChannelUserDto, SimpleMessageDto } from '@/api/models/sharing.dtos';
 import MessageItem from '@/components/MessageItem.vue';
 import ObserverTrigger from '@/components/common/ObserverTrigger.vue';
 
@@ -38,6 +38,7 @@ export default defineComponent({
       required: true,
     },
     newSimpleMessage: {} as PropType<SimpleMessageDto>,
+    updatedUser: {} as PropType<ChannelUserDto | null>,
   },
   computed: {
     messages() {
@@ -59,6 +60,16 @@ export default defineComponent({
       if (newValue) {
         this.simpleMessages.unshift(newValue);
       }
+    },
+    updatedUser(user: ChannelUserDto | null) {
+      // A user changed their nickname — reflect it on their past messages.
+      if (!user || !user.id) {
+        return;
+      }
+      const nickname = user.nickname ?? null;
+      this.simpleMessages = this.simpleMessages.map((message) =>
+        message.authorId === user.id ? { ...message, authorNickname: nickname } : message,
+      );
     },
     messages() {
       if (this.isScrollEnd) {

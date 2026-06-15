@@ -61,7 +61,9 @@ const messages = {
       placeholder: '닉네임 입력',
       save: '저장',
       saved: '닉네임을 저장했습니다.',
+      duplicate: '이미 사용 중인 닉네임입니다.',
       host: '방장',
+      me: '나',
     },
     channel: {
       copyLink: '공유 링크 복사',
@@ -158,7 +160,9 @@ const messages = {
       placeholder: 'Enter a nickname',
       save: 'Save',
       saved: 'Nickname saved.',
+      duplicate: 'That nickname is already in use.',
       host: 'Host',
+      me: 'me',
     },
     channel: {
       copyLink: 'Copy Share Link',

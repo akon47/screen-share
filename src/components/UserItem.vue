@@ -4,6 +4,7 @@
     <div class="identifier">
       {{ identifier }}
     </div>
+    <span v-if="isMe" class="me-tag">({{ $t('nickname.me') }})</span>
   </div>
 </template>
 
@@ -15,10 +16,17 @@ export default defineComponent({
   name: 'UserItem',
   props: {
     user: Object as PropType<ChannelUserDto>,
+    myId: {
+      type: String,
+      default: '',
+    },
   },
   computed: {
     isHost(): boolean {
       return this.user?.roleType === 'HOST';
+    },
+    isMe(): boolean {
+      return !!this.myId && this.user?.id === this.myId;
     },
     identifier() {
       // Prefer the nickname, fall back to the short id segment.
@@ -53,6 +61,13 @@ export default defineComponent({
   border-radius: 4px;
   background: var(--link-accent-color);
   color: #fff;
+  flex-shrink: 0;
+}
+
+.me-tag {
+  font-size: 0.8em;
+  color: var(--link-accent-color);
+  font-weight: bold;
   flex-shrink: 0;
 }
 

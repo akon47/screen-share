@@ -52,7 +52,7 @@
     </div>
     <div v-if="isJoined" class="user-container">
       <user-form class="user-form" :token="token" :channel-id="channelId" :update-key="userUpdateKey"/>
-      <message-form :token="token" :channel-id="channelId" :new-simple-message="newSimpleMessage"/>
+      <message-form :token="token" :channel-id="channelId" :new-simple-message="newSimpleMessage" :updated-user="lastUpdatedUser"/>
     </div>
   </div>
 </template>
@@ -64,7 +64,7 @@ import SignalingWebSocketClient from '@/utils/websocket';
 import { HttpApiError } from '@/api/common/httpApiClient';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 import MessageForm from '@/components/MessageForm.vue';
-import { SimpleMessageDto } from '@/api/models/sharing.dtos';
+import { ChannelUserDto, SimpleMessageDto } from '@/api/models/sharing.dtos';
 import UserForm from '@/components/UserForm.vue';
 
 // Phase of the connection from the perspective of the local user.
@@ -217,6 +217,7 @@ export default defineComponent({
       },
       signalingWebSocketClient: {} as SignalingWebSocketClient,
       newSimpleMessage: {} as SimpleMessageDto,
+      lastUpdatedUser: null as null | ChannelUserDto,
       userUpdateKey: {},
       isLoading: false,
       isJoined: false,
@@ -742,8 +743,10 @@ export default defineComponent({
           });
       };
 
-      this.signalingWebSocketClient.onuserupdated = () => {
-        // A user changed their nickname — refresh the user list.
+      this.signalingWebSocketClient.onuserupdated = (user) => {
+        // A user changed their nickname — refresh the user list and let the
+        // chat update the name shown on that user's past messages.
+        this.lastUpdatedUser = user;
         this.userUpdateKey = {};
       };
 
