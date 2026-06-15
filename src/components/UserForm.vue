@@ -10,7 +10,7 @@
       <button :disabled="isSaving" @click="saveNickname">{{ $t('nickname.save') }}</button>
     </div>
     <div class="user-list-container">
-      <user-item v-for="user in users" :key="user.id" :user="user"/>
+      <user-item v-for="user in users" :key="user.id" :user="user" :my-id="myUserId"/>
     </div>
   </div>
 </template>
@@ -23,6 +23,19 @@ import { ChannelUserDto } from '@/api/models/sharing.dtos';
 import UserItem from '@/components/UserItem.vue';
 
 const NICKNAME_STORAGE_KEY = 'screen-share-nickname';
+
+// Extract the user id (JWT subject) from the auth token, without verifying it.
+function decodeUserId(token: string): string {
+  try {
+    let base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    return JSON.parse(atob(base64)).sub ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export default defineComponent({
   name: 'UserForm',
@@ -37,6 +50,11 @@ export default defineComponent({
       required: true,
     },
     updateKey: {},
+  },
+  computed: {
+    myUserId(): string {
+      return decodeUserId(this.token);
+    },
   },
   data() {
     return {
@@ -82,7 +100,12 @@ export default defineComponent({
         await this.fetchUsers();
         this.$toast.success(String(this.$t('nickname.saved')));
       } catch (error) {
-        this.$toast.error((error as HttpApiError).getErrorMessage());
+        const apiError = error as HttpApiError;
+        if (apiError.isConflict && apiError.isConflict()) {
+          this.$toast.error(String(this.$t('nickname.duplicate')));
+        } else {
+          this.$toast.error(apiError.getErrorMessage());
+        }
       } finally {
         this.isSaving = false;
       }
