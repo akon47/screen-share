@@ -112,10 +112,7 @@ export interface PayloadDto extends DataTransferObject {
     | 'CHANNEL_PARTED'
     | 'REACTION'
     | 'KICK'
-    | 'KICKED'
-    | 'REQUEST_PRESENT'
-    | 'SET_PRESENTER'
-    | 'PRESENTER_CHANGED';
+    | 'KICKED';
 }
 
 // dto for websocket relay session description

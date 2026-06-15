@@ -79,16 +79,6 @@ export default class SignalingWebSocketClient {
             this.onkicked();
           }
           break;
-        case 'REQUEST_PRESENT':
-          if (this.onpresentrequest) {
-            this.onpresentrequest(payload.userId);
-          }
-          break;
-        case 'PRESENTER_CHANGED':
-          if (this.onpresenterchanged) {
-            this.onpresenterchanged(payload.userId);
-          }
-          break;
       }
     };
   }
@@ -134,22 +124,6 @@ export default class SignalingWebSocketClient {
     }));
   }
 
-  public requestPresent() {
-    this.socket.send(JSON.stringify({
-      authorizationToken: this.authorizationToken,
-      type: 'REQUEST_PRESENT',
-    }));
-  }
-
-  // Assign the presenter. A null target releases presenting back to the host.
-  public setPresenter(targetUserId: string | null) {
-    this.socket.send(JSON.stringify({
-      authorizationToken: this.authorizationToken,
-      type: 'SET_PRESENTER',
-      userId: targetUserId,
-    }));
-  }
-
   public close() {
     this.socket.close();
   }
@@ -162,8 +136,6 @@ export default class SignalingWebSocketClient {
   public onnewmessage: { (message: SimpleMessageDto): void } | undefined;
   public onreaction: { (emoji: string, userId: string): void } | undefined;
   public onkicked: { (): void } | undefined;
-  public onpresentrequest: { (userId: string): void } | undefined;
-  public onpresenterchanged: { (presenterId: string): void } | undefined;
 
   public onchanneljoined: { (user: ChannelUserDto): void } | undefined;
 
