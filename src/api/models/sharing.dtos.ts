@@ -10,6 +10,18 @@ export interface CreateSharingChannelRequestDto extends DataTransferObject {
   readonly isPublic?: boolean;
 }
 
+// dto for a single ICE server entry
+export interface IceServerDto extends DataTransferObject {
+  readonly urls: string[] | string;
+  readonly username?: string;
+  readonly credential?: string;
+}
+
+// dto for short-lived STUN/TURN ICE servers
+export interface TurnCredentialsDto extends DataTransferObject {
+  readonly iceServers: IceServerDto[];
+}
+
 // dto for a publicly listed sharing channel
 export interface PublicChannelDto extends DataTransferObject {
   // channel id

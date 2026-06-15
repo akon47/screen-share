@@ -4,7 +4,7 @@ import {
   CreateMessageRequestDto,
   CreateSharingChannelRequestDto,
   CreateSharingChannelResponseDto,
-  JoinSharingChannelRequestDto, JoinSharingChannelResponseDto, PublicChannelDto, SimpleMessageDto,
+  JoinSharingChannelRequestDto, JoinSharingChannelResponseDto, PublicChannelDto, SimpleMessageDto, TurnCredentialsDto,
 } from '@/api/models/sharing.dtos';
 import { CollectionDto, SliceDto } from '@/api/models/common.dtos';
 
@@ -16,6 +16,11 @@ function createSharingChannel(createSharingChannelRequestDto: CreateSharingChann
 // Get Public Sharing Channels
 function getPublicChannels() {
   return sharingV1.getRequest<CollectionDto<PublicChannelDto>>('/channels/public');
+}
+
+// Get short-lived STUN/TURN ICE servers
+function getTurnCredentials() {
+  return sharingV1.getRequest<TurnCredentialsDto>('/turn-credentials');
 }
 
 // Join Sharing Channel
@@ -52,6 +57,7 @@ function getChannelUsers(authorizationToken: string, channelId: string) {
 export {
   createSharingChannel,
   getPublicChannels,
+  getTurnCredentials,
   joinSharingChannel,
   createMessage,
   getChannelMessages,

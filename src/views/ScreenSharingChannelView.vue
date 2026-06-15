@@ -54,7 +54,7 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue';
-import { joinSharingChannel } from '@/api/sharing';
+import { joinSharingChannel, getTurnCredentials } from '@/api/sharing';
 import SignalingWebSocketClient from '@/utils/websocket';
 import { HttpApiError } from '@/api/common/httpApiClient';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
@@ -196,7 +196,7 @@ export default defineComponent({
               'stun:stun4.l.google.com:19302',
             ],
           },
-        ],
+        ] as any[],
       },
       signalingWebSocketClient: {} as SignalingWebSocketClient,
       newSimpleMessage: {} as SimpleMessageDto,
@@ -576,8 +576,31 @@ export default defineComponent({
         // setParameters can fail on some browsers; ignore.
       }
     },
+    // ---- ICE servers (STUN + optional Cloudflare TURN) --------------------
+    async loadIceServers() {
+      // Fetch short-lived TURN credentials. Without a TURN relay, connections on
+      // restrictive networks (e.g. mobile/CGNAT) fail; TURN fixes those cases.
+      try {
+        const credentials = await getTurnCredentials();
+        if (credentials && Array.isArray(credentials.iceServers) && credentials.iceServers.length > 0) {
+          const servers = credentials.iceServers
+            .map((server) => {
+              // Port 53 URLs are blocked by browsers — drop them.
+              const urls = Array.isArray(server.urls)
+                ? server.urls.filter((u) => !u.includes(':53'))
+                : server.urls;
+              return { ...server, urls };
+            })
+            .filter((server) => (Array.isArray(server.urls) ? server.urls.length > 0 : !!server.urls));
+          this.rtcConfiguration.iceServers = [...this.rtcConfiguration.iceServers, ...servers];
+        }
+      } catch {
+        // Keep the STUN-only fallback if credentials cannot be fetched.
+      }
+    },
     // ---- Signaling --------------------------------------------------------
     async initializeWebSocket(authorizationToken: string) {
+      await this.loadIceServers();
       this.signalingWebSocketClient = new SignalingWebSocketClient(authorizationToken);
 
       this.signalingWebSocketClient.onerror = () => {
