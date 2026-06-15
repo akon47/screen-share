@@ -13,7 +13,7 @@ export default class SignalingWebSocketClient {
 
   constructor(authorizationToken: string) {
     this.authorizationToken = authorizationToken;
-    this.socket = new SockJS(process.env.VUE_APP_WEBSOCKET_URI);
+    this.socket = new SockJS(process.env.VUE_APP_WEBSOCKET_URI as string);
     this.socket.onopen = () => {
       console.log('onopen');
       this.joinChannel();
@@ -69,6 +69,26 @@ export default class SignalingWebSocketClient {
             this.onchanneljoined(payload.user);
           }
           break;
+        case 'REACTION':
+          if (this.onreaction) {
+            this.onreaction(payload.emoji, payload.userId);
+          }
+          break;
+        case 'KICKED':
+          if (this.onkicked) {
+            this.onkicked();
+          }
+          break;
+        case 'REQUEST_PRESENT':
+          if (this.onpresentrequest) {
+            this.onpresentrequest(payload.userId);
+          }
+          break;
+        case 'PRESENTER_CHANGED':
+          if (this.onpresenterchanged) {
+            this.onpresenterchanged(payload.userId);
+          }
+          break;
       }
     };
   }
@@ -98,6 +118,38 @@ export default class SignalingWebSocketClient {
     } as RelayIceCandidateDto));
   }
 
+  public sendReaction(emoji: string) {
+    this.socket.send(JSON.stringify({
+      authorizationToken: this.authorizationToken,
+      type: 'REACTION',
+      emoji: emoji,
+    }));
+  }
+
+  public kickUser(targetUserId: string) {
+    this.socket.send(JSON.stringify({
+      authorizationToken: this.authorizationToken,
+      type: 'KICK',
+      userId: targetUserId,
+    }));
+  }
+
+  public requestPresent() {
+    this.socket.send(JSON.stringify({
+      authorizationToken: this.authorizationToken,
+      type: 'REQUEST_PRESENT',
+    }));
+  }
+
+  // Assign the presenter. A null target releases presenting back to the host.
+  public setPresenter(targetUserId: string | null) {
+    this.socket.send(JSON.stringify({
+      authorizationToken: this.authorizationToken,
+      type: 'SET_PRESENTER',
+      userId: targetUserId,
+    }));
+  }
+
   public close() {
     this.socket.close();
   }
@@ -108,6 +160,10 @@ export default class SignalingWebSocketClient {
   public onrelaysessiondescription: { (userId: string, sessionDescription: RTCSessionDescriptionInit): void } | undefined;
   public onrelayicecandidate: { (userId: string, iceCandidate: RTCIceCandidateInit): void } | undefined;
   public onnewmessage: { (message: SimpleMessageDto): void } | undefined;
+  public onreaction: { (emoji: string, userId: string): void } | undefined;
+  public onkicked: { (): void } | undefined;
+  public onpresentrequest: { (userId: string): void } | undefined;
+  public onpresenterchanged: { (presenterId: string): void } | undefined;
 
   public onchanneljoined: { (user: ChannelUserDto): void } | undefined;
 

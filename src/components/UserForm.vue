@@ -10,7 +10,9 @@
       <button :disabled="isSaving" @click="saveNickname">{{ $t('nickname.save') }}</button>
     </div>
     <div class="user-list-container">
-      <user-item v-for="user in users" :key="user.id" :user="user" :my-id="myUserId"/>
+      <user-item v-for="user in users" :key="user.id" :user="user" :my-id="myUserId"
+                 :is-host="isHost" :presenter-id="presenterId"
+                 @kick="$emit('kick', $event)" @set-presenter="$emit('set-presenter', $event)"/>
     </div>
   </div>
 </template>
@@ -40,6 +42,7 @@ function decodeUserId(token: string): string {
 export default defineComponent({
   name: 'UserForm',
   components: { UserItem },
+  emits: ['kick', 'set-presenter'],
   props: {
     token: {
       type: String,
@@ -50,6 +53,14 @@ export default defineComponent({
       required: true,
     },
     updateKey: {},
+    isHost: {
+      type: Boolean,
+      default: false,
+    },
+    presenterId: {
+      type: String,
+      default: '',
+    },
   },
   computed: {
     myUserId(): string {
