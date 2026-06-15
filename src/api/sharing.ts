@@ -4,13 +4,18 @@ import {
   CreateMessageRequestDto,
   CreateSharingChannelRequestDto,
   CreateSharingChannelResponseDto,
-  JoinSharingChannelRequestDto, JoinSharingChannelResponseDto, SimpleMessageDto,
+  JoinSharingChannelRequestDto, JoinSharingChannelResponseDto, PublicChannelDto, SimpleMessageDto,
 } from '@/api/models/sharing.dtos';
-import DataTransferObject, { CollectionDto, SliceDto } from '@/api/models/common.dtos';
+import { CollectionDto, SliceDto } from '@/api/models/common.dtos';
 
 // Create New Sharing Channel
 function createSharingChannel(createSharingChannelRequestDto: CreateSharingChannelRequestDto) {
   return sharingV1.postRequest<CreateSharingChannelResponseDto>('/channels', null, createSharingChannelRequestDto);
+}
+
+// Get Public Sharing Channels
+function getPublicChannels() {
+  return sharingV1.getRequest<CollectionDto<PublicChannelDto>>('/channels/public');
 }
 
 // Join Sharing Channel
@@ -46,6 +51,7 @@ function getChannelUsers(authorizationToken: string, channelId: string) {
 
 export {
   createSharingChannel,
+  getPublicChannels,
   joinSharingChannel,
   createMessage,
   getChannelMessages,

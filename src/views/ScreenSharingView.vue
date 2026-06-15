@@ -2,9 +2,10 @@
   <div class="screen-sharing-container">
     <div class="form-container">
       <div class="form-wrapper">
-        <div class="form-title">Screen Sharing</div>
-        <button @click="creatingSharingChannel">New Sharing</button>
-        <button @click="joiningSharingChannel">Join Sharing</button>
+        <div class="form-title">{{ $t('home.title') }}</div>
+        <button @click="creatingSharingChannel">{{ $t('home.newSharing') }}</button>
+        <button @click="joiningSharingChannel">{{ $t('home.joinSharing') }}</button>
+        <button class="secondary" @click="browsingPublicChannels">{{ $t('home.browsePublic') }}</button>
       </div>
     </div>
   </div>
@@ -22,6 +23,9 @@ export default defineComponent({
     joiningSharingChannel() {
       this.$router.push(`/screen-sharing/join-channel`);
     },
+    browsingPublicChannels() {
+      this.$router.push(`/screen-sharing/public-channels`);
+    },
   },
 });
 </script>
@@ -32,6 +36,12 @@ export default defineComponent({
 
   width: 100%;
   height: 100%;
+}
+
+.form-wrapper button.secondary {
+  background: transparent;
+  border: 1px solid var(--menu-hover-color);
+  color: var(--base-color);
 }
 
 
