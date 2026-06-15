@@ -10,6 +10,11 @@
         <span class="quality-text">{{ quality.label }}</span>
       </div>
 
+      <!-- Relay (TURN) vs direct (P2P) badge -->
+      <div v-if="showVideo && connectionInfo" class="conn-badge" :class="connectionInfo.relay ? 'relay' : 'direct'" :title="connectionInfo.title">
+        {{ connectionInfo.relay ? '🔁' : '↔' }} {{ connectionInfo.label }}
+      </div>
+
       <!-- Host: connected viewer count -->
       <div v-if="showVideo && isHost" class="viewer-badge" :title="$t('channel.viewers')">
         👁 {{ connectedViewerCount }}
@@ -131,6 +136,18 @@ export default defineComponent({
     connectedViewerCount(): number {
       return Object.values(this.peerStates).filter((s) => s === 'connected').length;
     },
+    // Relay (TURN) vs direct (P2P) indicator for the active connection.
+    connectionInfo(): null | { relay: boolean; label: string; title: string } {
+      if (!this.connectionType) {
+        return null;
+      }
+      const relay = this.connectionType === 'relay';
+      return {
+        relay,
+        label: String(this.$t(relay ? 'channel.connRelay' : 'channel.connDirect')),
+        title: String(this.$t(relay ? 'channel.connRelayHint' : 'channel.connDirectHint')),
+      };
+    },
     muteLabel(): string {
       if (this.isHost) {
         return this.audioEnabled ? `🔊 ${this.$t('channel.hostMute')}` : `🔇 ${this.$t('channel.hostUnmute')}`;
@@ -222,6 +239,8 @@ export default defineComponent({
       selectedQuality: 'auto',
       // Connection quality stats.
       quality: null as null | { level: string; label: string; tooltip: string },
+      // Whether the active connection is relayed via TURN or a direct P2P path.
+      connectionType: null as null | 'relay' | 'direct',
       statsIntervalHandle: 0 as number,
       statsPrev: null as null | { bytes: number; timestamp: number },
       monitoredPeer: null as null | RTCPeerConnection,
@@ -393,6 +412,7 @@ export default defineComponent({
       this.monitoredPeer = null;
       this.statsPrev = null;
       this.quality = null;
+      this.connectionType = null;
     },
     async sampleStats() {
       const peer = this.monitoredPeer;
@@ -406,6 +426,10 @@ export default defineComponent({
         let packetsLost = 0;
         let packetsTotal = 0;
         let rtt = -1;
+        const candidateTypeById: Record<string, string> = {};
+        const pairsById: Record<string, any> = {};
+        let transportSelectedPairId = '';
+        let nominatedPair: any = null;
         report.forEach((stat: any) => {
           if (stat.type === 'inbound-rtp' && stat.kind === 'video') {
             bytes = stat.bytesReceived ?? 0;
@@ -420,12 +444,28 @@ export default defineComponent({
             if (typeof stat.roundTripTime === 'number') {
               rtt = stat.roundTripTime;
             }
-          } else if (stat.type === 'candidate-pair' && (stat.nominated || stat.state === 'succeeded')) {
-            if (typeof stat.currentRoundTripTime === 'number') {
+          } else if (stat.type === 'local-candidate' || stat.type === 'remote-candidate') {
+            candidateTypeById[stat.id] = stat.candidateType;
+          } else if (stat.type === 'candidate-pair') {
+            pairsById[stat.id] = stat;
+            if (stat.nominated && stat.state === 'succeeded') {
+              nominatedPair = stat;
+            }
+            if (typeof stat.currentRoundTripTime === 'number' && (stat.nominated || stat.state === 'succeeded')) {
               rtt = stat.currentRoundTripTime;
             }
+          } else if (stat.type === 'transport' && stat.selectedCandidatePairId) {
+            transportSelectedPairId = stat.selectedCandidatePairId;
           }
         });
+
+        // Determine whether the active candidate pair is relayed (TURN) or direct.
+        const selectedPair = (transportSelectedPairId && pairsById[transportSelectedPairId]) || nominatedPair;
+        if (selectedPair) {
+          const localType = candidateTypeById[selectedPair.localCandidateId];
+          const remoteType = candidateTypeById[selectedPair.remoteCandidateId];
+          this.connectionType = (localType === 'relay' || remoteType === 'relay') ? 'relay' : 'direct';
+        }
 
         let kbps = 0;
         if (this.statsPrev && timestamp > this.statsPrev.timestamp) {
@@ -956,6 +996,28 @@ export default defineComponent({
 .quality-badge.good .quality-dot { background: #3ec46d; }
 .quality-badge.fair .quality-dot { background: #e8b339; }
 .quality-badge.poor .quality-dot { background: #e0533d; }
+
+.conn-badge {
+  position: absolute;
+  top: 44px;
+  left: 12px;
+  z-index: 2;
+
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 0.8em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.conn-badge.relay {
+  background: rgba(180, 110, 30, 0.75);
+}
+
+.conn-badge.direct {
+  background: rgba(40, 120, 70, 0.7);
+}
 
 .viewer-badge {
   position: absolute;
