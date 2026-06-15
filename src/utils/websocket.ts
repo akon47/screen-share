@@ -18,11 +18,17 @@ export default class SignalingWebSocketClient {
       console.log('onopen');
       this.joinChannel();
     };
-    this.socket.onclose = () => {
+    this.socket.onclose = (ev) => {
       console.log('onclose');
+      if (this.onclose) {
+        this.onclose(ev);
+      }
     };
-    this.socket.onerror = () => {
+    this.socket.onerror = (ev) => {
       console.log('onerror');
+      if (this.onerror) {
+        this.onerror(ev);
+      }
     };
     this.socket.onmessage = async (ev) => {
       const payload = JSON.parse(ev.data);
@@ -98,4 +104,8 @@ export default class SignalingWebSocketClient {
   public onnewmessage: { (message: SimpleMessageDto): void } | undefined;
 
   public onchanneljoined: { (user: ChannelUserDto): void } | undefined;
+
+  // Transport-level events (used to surface signaling failures to the user).
+  public onerror: { (event: Event): void } | undefined;
+  public onclose: { (event: CloseEvent): void } | undefined;
 }
