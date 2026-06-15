@@ -4,6 +4,24 @@ import DataTransferObject from '@/api/models/common.dtos';
 export interface CreateSharingChannelRequestDto extends DataTransferObject {
   // channel password
   readonly password: string | null;
+  // channel title (shown in the public channel list)
+  readonly title?: string | null;
+  // whether the channel is listed publicly
+  readonly isPublic?: boolean;
+}
+
+// dto for a publicly listed sharing channel
+export interface PublicChannelDto extends DataTransferObject {
+  // channel id
+  readonly channelId: string;
+  // channel title
+  readonly title: string | null;
+  // whether the channel requires a password
+  readonly hasPassword: boolean;
+  // number of users currently in the channel
+  readonly userCount: number;
+  // channel creation time
+  readonly createdAt: string;
 }
 
 // dto for creating sharing channel

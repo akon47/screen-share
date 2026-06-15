@@ -1,24 +1,24 @@
 <template>
   <div class="form-container">
     <div class="form-wrapper">
-      <div class="form-title">Join Sharing</div>
+      <div class="form-title">{{ $t('join.title') }}</div>
       <div>
         <input :class="{'invalid': channelId && !isChannelIdValid}"
-               type="text" id="channel-id" v-model="channelId" placeholder="Sharing Channel Id" maxlength="36"/>
+               type="text" id="channel-id" v-model="channelId" :placeholder="$t('join.channelIdPlaceholder')" maxlength="36"/>
       </div>
       <div>
         <input :class="{'invalid': password && !isPasswordValid}"
-               type="text" id="channel-password" v-model="password" placeholder="Sharing Channel Password"
+               type="text" id="channel-password" v-model="password" :placeholder="$t('join.passwordPlaceholder')"
                maxlength="16"/>
       </div>
       <button :disabled="!isChannelIdValid || !isPasswordValid || isLoading"
               @click="joiningSharingChannel">
-        Join
+        {{ $t('join.join') }}
       </button>
       <div class="footer-message">
-        Want to create a sharing channel?
+        {{ $t('join.createPrompt') }}
         <router-link to="/screen-sharing/create-channel">
-          New Sharing
+          {{ $t('join.goCreate') }}
         </router-link>
       </div>
     </div>

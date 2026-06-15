@@ -26,6 +26,11 @@ const router = createRouter({
       component: () => import('../views/JoinScreenSharingChannelView.vue'),
     },
     {
+      path: '/screen-sharing/public-channels',
+      name: 'PublicScreenSharingChannels',
+      component: () => import('../views/PublicChannelsView.vue'),
+    },
+    {
       path: '/screen-sharing/:channelId',
       name: 'ScreenSharingChannel',
       component: () => import('../views/ScreenSharingChannelView.vue'),

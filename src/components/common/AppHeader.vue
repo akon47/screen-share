@@ -8,6 +8,7 @@
       </div>
     </router-link>
     <div class="menu-container">
+      <button class="lang-button" @click="toggleLocale">{{ localeLabel }}</button>
       <div class="themes">
         <input id="theme-button" type="checkbox" :checked="isDarkTheme" @change="toggleTheme"/>
         <label class="switch" for="theme-button"/>
@@ -19,6 +20,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import store from '@/store';
+import { setLocale } from '@/i18n';
 
 export default defineComponent({
   name: 'AppHeader',
@@ -26,10 +28,17 @@ export default defineComponent({
     isDarkTheme(): boolean {
       return store.getters['commonStore/isDarkTheme'] ?? false;
     },
+    localeLabel(): string {
+      // Show the language you can switch TO.
+      return this.$i18n.locale === 'ko' ? 'EN' : '한국어';
+    },
   },
   methods: {
     toggleTheme() {
       store.dispatch('commonStore/toggleTheme');
+    },
+    toggleLocale() {
+      setLocale(this.$i18n.locale === 'ko' ? 'en' : 'ko');
     },
   },
 });
@@ -73,6 +82,23 @@ export default defineComponent({
   grid-template-rows: 1fr;
   grid-auto-flow: column;
   grid-column-gap: 5px;
+  align-items: center;
+}
+
+.lang-button {
+  background: transparent;
+  color: var(--base-color);
+  border: 1px solid var(--menu-hover-color);
+  padding: 5px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.lang-button:hover {
+  background: var(--menu-hover-color);
 }
 
 .menu-container a {

@@ -11,7 +11,7 @@
       </div>
 
       <!-- Host: connected viewer count -->
-      <div v-if="showVideo && isHost" class="viewer-badge" :title="'연결된 시청자 / Connected viewers'">
+      <div v-if="showVideo && isHost" class="viewer-badge" :title="$t('channel.viewers')">
         👁 {{ connectedViewerCount }}
       </div>
 
@@ -20,28 +20,28 @@
         <loading-spinner v-if="overlay.kind === 'loading' || overlay.kind === 'reconnecting'" class="overlay-spinner"/>
         <div v-else class="overlay-icon">⚠️</div>
         <div class="overlay-title">{{ overlay.title }}</div>
-        <div v-if="overlay.detail" class="overlay-detail" v-html="overlay.detail"></div>
-        <div v-if="overlay.hint" class="overlay-hint" v-html="overlay.hint"></div>
+        <div v-if="overlay.detail" class="overlay-detail">{{ overlay.detail }}</div>
+        <div v-if="overlay.hint" class="overlay-hint">{{ overlay.hint }}</div>
         <div v-if="overlay.showRetry" class="overlay-actions">
-          <button @click="retryConnection">다시 시도 / Retry</button>
-          <button class="secondary" @click="partChannel">나가기 / Leave</button>
+          <button @click="retryConnection">{{ $t('common.retry') }}</button>
+          <button class="secondary" @click="partChannel">{{ $t('common.leave') }}</button>
         </div>
       </div>
 
       <div v-show="showVideo" class="video-footer">
         <div class="footer-left">
-          <button @click="copyShareLink">Copy Share Link</button>
+          <button @click="copyShareLink">{{ $t('channel.copyLink') }}</button>
           <button @click="toggleMute">{{ muteLabel }}</button>
-          <button v-if="isFullscreenSupported" @click="toggleFullscreen">⛶ Fullscreen</button>
-          <select v-if="isHost" v-model="selectedQuality" @change="applyQuality" class="quality-select" title="화질 / Quality">
-            <option value="auto">화질: 자동 / Auto</option>
-            <option value="high">화질: 높음 / High (1080p)</option>
-            <option value="medium">화질: 보통 / Medium (720p)</option>
-            <option value="low">화질: 낮음 / Low (480p)</option>
+          <button v-if="isFullscreenSupported" @click="toggleFullscreen">⛶ {{ $t('channel.fullscreen') }}</button>
+          <select v-if="isHost" v-model="selectedQuality" @change="applyQuality" class="quality-select" :title="$t('channel.qualityLabel')">
+            <option value="auto">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityAuto') }}</option>
+            <option value="high">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityHigh') }}</option>
+            <option value="medium">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityMedium') }}</option>
+            <option value="low">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityLow') }}</option>
           </select>
         </div>
         <div class="footer-buttons">
-          <button @click="partChannel">Exit</button>
+          <button @click="partChannel">{{ $t('channel.exit') }}</button>
         </div>
       </div>
     </div>
@@ -74,6 +74,17 @@ const DISCONNECT_GRACE_MS = 8000;
 const MAX_ICE_RESTARTS = 2;
 // Quality stats sampling interval.
 const STATS_INTERVAL_MS = 2000;
+// Adaptive bitrate sampling interval (host side).
+const ADAPT_INTERVAL_MS = 4000;
+// Adaptive bitrate ladder: from most degraded to full quality. The host moves
+// each viewer up/down this ladder based on the packet loss they report back.
+const BITRATE_LEVELS: { maxBitrate: number; scaleDown: number }[] = [
+  { maxBitrate: 300_000, scaleDown: 4 },
+  { maxBitrate: 600_000, scaleDown: 2 },
+  { maxBitrate: 1_200_000, scaleDown: 1.5 },
+  { maxBitrate: 2_500_000, scaleDown: 1 },
+  { maxBitrate: 5_000_000, scaleDown: 1 },
+];
 
 // Resolution / frame-rate presets used by the host quality selector.
 const QUALITY_PRESETS: { [preset: string]: any } = {
@@ -122,16 +133,17 @@ export default defineComponent({
     },
     muteLabel(): string {
       if (this.isHost) {
-        return this.audioEnabled ? '🔊 오디오 끄기 / Mute' : '🔇 오디오 켜기 / Unmute';
+        return this.audioEnabled ? `🔊 ${this.$t('channel.hostMute')}` : `🔇 ${this.$t('channel.hostUnmute')}`;
       }
-      return this.audioMuted ? '🔇 소리 켜기 / Unmute' : '🔊 소리 끄기 / Mute';
+      return this.audioMuted ? `🔇 ${this.$t('channel.guestUnmute')}` : `🔊 ${this.$t('channel.guestMute')}`;
     },
     // Drives the status / error overlay shown over the video area.
     overlay(): { show: boolean; kind: string; title: string; detail: string; hint: string; showRetry: boolean } {
+      const t = (key: string) => String(this.$t(key));
       // Host: only block the view while the local screen is being captured.
       if (this.isHost) {
         if (this.isLoading) {
-          return { show: true, kind: 'loading', title: '화면을 준비하는 중입니다… / Preparing screen…', detail: '', hint: '', showRetry: false };
+          return { show: true, kind: 'loading', title: t('channel.preparing'), detail: '', hint: '', showRetry: false };
         }
         return { show: false, kind: '', title: '', detail: '', hint: '', showRetry: false };
       }
@@ -139,43 +151,24 @@ export default defineComponent({
       // Guest perspective.
       switch (this.phase) {
         case 'connecting':
-          return {
-            show: true,
-            kind: 'loading',
-            title: '호스트와 연결하는 중입니다… / Connecting to the host…',
-            detail: '',
-            hint: '',
-            showRetry: false,
-          };
+          return { show: true, kind: 'loading', title: t('channel.connecting'), detail: '', hint: '', showRetry: false };
         case 'reconnecting':
-          return {
-            show: true,
-            kind: 'reconnecting',
-            title: '연결이 불안정하여 재연결하는 중입니다… / Connection unstable, reconnecting…',
-            detail: '',
-            hint: '',
-            showRetry: false,
-          };
+          return { show: true, kind: 'reconnecting', title: t('channel.reconnecting'), detail: '', hint: '', showRetry: false };
         case 'failed':
           return {
             show: true,
             kind: 'failed',
-            title: '화면을 불러올 수 없습니다 / Unable to load the shared screen',
-            detail:
-              'P2P 직접 연결에 실패했습니다. 양쪽 네트워크의 방화벽이나 NAT 제한(예: 회사·학교 네트워크, 대칭형 NAT) 때문일 수 있습니다.<br/>' +
-              'This service does not run a relay (TURN) server, so only direct peer-to-peer connections are supported. ' +
-              'A firewall or NAT on either side likely blocked the direct connection.',
-            hint:
-              '👉 모바일 핫스팟 등 다른 네트워크에서 다시 시도하면 연결될 수 있습니다.<br/>' +
-              '👉 Try again on a different network (e.g. a mobile hotspot).',
+            title: t('channel.failedTitle'),
+            detail: t('channel.failedDetail'),
+            hint: t('channel.failedHint'),
             showRetry: true,
           };
         case 'ended':
           return {
             show: true,
             kind: 'failed',
-            title: '화면 공유가 종료되었습니다 / The screen sharing has ended',
-            detail: '호스트가 공유를 종료했습니다. / The host has stopped sharing.',
+            title: t('channel.endedTitle'),
+            detail: t('channel.endedDetail'),
             hint: '',
             showRetry: false,
           };
@@ -232,6 +225,9 @@ export default defineComponent({
       statsIntervalHandle: 0 as number,
       statsPrev: null as null | { bytes: number; timestamp: number },
       monitoredPeer: null as null | RTCPeerConnection,
+      // Adaptive bitrate (host): per-viewer quality level index.
+      adaptIntervalHandle: 0 as number,
+      peerQualityLevels: new Map<string, number>(),
     };
   },
   methods: {
@@ -294,7 +290,7 @@ export default defineComponent({
             if (!this.monitoredPeer) {
               this.startStatsMonitor(peerConnection);
             }
-            this.$toast.success('시청자와 연결되었습니다. / A viewer connected.');
+            this.$toast.success(String(this.$t('channel.viewerConnected')));
             break;
           case 'disconnected':
             this.scheduleDisconnectFailure(userId);
@@ -313,7 +309,7 @@ export default defineComponent({
       const attempts = this.iceRestartCounts.get(userId) ?? 0;
       if (attempts >= MAX_ICE_RESTARTS) {
         // Out of retries — the direct connection genuinely failed.
-        this.$toast.error('한 시청자와 P2P 연결에 실패했습니다 (네트워크 제한). / Failed to connect to a viewer (network restricted).');
+        this.$toast.error(String(this.$t('channel.viewerFailed')));
         return;
       }
       this.iceRestartCounts.set(userId, attempts + 1);
@@ -451,7 +447,11 @@ export default defineComponent({
         } else if (lossPct > 2 || (rttMs >= 0 && rttMs > 200) || (kbps > 0 && kbps < 600)) {
           level = 'fair';
         }
-        const labels: Record<string, string> = { good: '양호 / Good', fair: '보통 / Fair', poor: '나쁨 / Poor' };
+        const labels: Record<string, string> = {
+          good: String(this.$t('channel.qualityGood')),
+          fair: String(this.$t('channel.qualityFair')),
+          poor: String(this.$t('channel.qualityPoor')),
+        };
         const tooltipParts = [
           width && height ? `${width}×${height}` : '',
           kbps > 0 ? `${Math.round(kbps)} kbps` : '',
@@ -468,7 +468,7 @@ export default defineComponent({
       if (this.isHost) {
         const audioTracks = this.stream instanceof MediaStream ? this.stream.getAudioTracks() : [];
         if (audioTracks.length === 0) {
-          this.$toast.info('공유 중인 오디오가 없습니다. / No audio is being shared.');
+          this.$toast.info(String(this.$t('channel.noAudio')));
           return;
         }
         this.audioEnabled = !this.audioEnabled;
@@ -512,9 +512,68 @@ export default defineComponent({
       }
       try {
         await videoTrack.applyConstraints(QUALITY_PRESETS[this.selectedQuality] ?? {});
-        this.$toast.success('화질 설정을 적용했습니다. / Quality updated.');
+        this.$toast.success(String(this.$t('channel.qualityApplied')));
       } catch (error) {
-        this.$toast.warning('이 브라우저/화면 소스에서는 화질 변경을 지원하지 않습니다. / Quality change is not supported here.');
+        this.$toast.warning(String(this.$t('channel.qualityUnsupported')));
+      }
+    },
+    // ---- Adaptive bitrate (host) ------------------------------------------
+    startAdaptiveBitrate() {
+      if (this.adaptIntervalHandle) {
+        return;
+      }
+      this.adaptIntervalHandle = window.setInterval(() => {
+        this.rtcPeerConnections.forEach((peer, userId) => {
+          if (peer.connectionState === 'connected') {
+            this.adaptPeerBitrate(userId, peer);
+          }
+        });
+      }, ADAPT_INTERVAL_MS);
+    },
+    async adaptPeerBitrate(userId: string, peer: RTCPeerConnection) {
+      const sender = peer.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (!sender) {
+        return;
+      }
+      // Read the loss the remote peer is reporting back to us.
+      let lossPct = -1;
+      try {
+        const report = await sender.getStats();
+        report.forEach((stat: any) => {
+          if (stat.type === 'remote-inbound-rtp' && typeof stat.fractionLost === 'number') {
+            lossPct = stat.fractionLost * 100;
+          }
+        });
+      } catch {
+        return;
+      }
+      if (lossPct < 0) {
+        return; // no usable feedback yet
+      }
+
+      let level = this.peerQualityLevels.get(userId);
+      if (level === undefined) {
+        level = BITRATE_LEVELS.length - 1; // start at the highest level
+      }
+      if (lossPct > 5) {
+        level = Math.max(0, level - 1); // congestion: step down
+      } else if (lossPct < 1) {
+        level = Math.min(BITRATE_LEVELS.length - 1, level + 1); // healthy: step up
+      }
+      this.peerQualityLevels.set(userId, level);
+      await this.applyEncoding(sender, BITRATE_LEVELS[level]);
+    },
+    async applyEncoding(sender: RTCRtpSender, target: { maxBitrate: number; scaleDown: number }) {
+      try {
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) {
+          (params as any).encodings = [{}];
+        }
+        params.encodings[0].maxBitrate = target.maxBitrate;
+        params.encodings[0].scaleResolutionDownBy = target.scaleDown;
+        await sender.setParameters(params);
+      } catch {
+        // setParameters can fail on some browsers; ignore.
       }
     },
     // ---- Signaling --------------------------------------------------------
@@ -523,7 +582,7 @@ export default defineComponent({
 
       this.signalingWebSocketClient.onerror = () => {
         if (this.isGuest && this.phase !== 'connected') {
-          this.$toast.error('시그널링 서버에 연결할 수 없습니다. / Cannot reach the signaling server.');
+          this.$toast.error(String(this.$t('channel.signalingFailed')));
         }
       };
 
@@ -573,7 +632,7 @@ export default defineComponent({
             // The host left — the share has ended.
             this.stopStatsMonitor();
             this.phase = 'ended';
-            this.$toast.info('호스트가 공유를 종료했습니다. / The host stopped sharing.');
+            this.$toast.info(String(this.$t('channel.hostLeft')));
             window.setTimeout(() => this.$router.push('/'), 2500);
           }
         }
@@ -633,12 +692,7 @@ export default defineComponent({
       // browsers. Fail loudly with a clear, bilingual reason.
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
         this.isLoading = false;
-        alert(
-          '이 브라우저에서는 화면 공유(호스트)를 지원하지 않습니다.\n' +
-          'PC의 최신 Chrome, Edge, Firefox, 또는 Safari를 사용해 주세요. (iOS/모바일은 화면 송출을 지원하지 않습니다.)\n\n' +
-          'Screen sharing (host) is not supported in this browser.\n' +
-          'Please use a recent desktop Chrome, Edge, Firefox or Safari. (iOS / mobile cannot capture the screen.)'
-        );
+        alert(String(this.$t('channel.hostUnsupported')));
         this.$router.push('/');
         return;
       }
@@ -649,11 +703,11 @@ export default defineComponent({
         this.isLoading = false;
         const name = error?.name;
         if (name === 'NotAllowedError' || name === 'AbortError') {
-          this.$toast.info('화면 공유가 취소되었습니다. / Screen sharing was cancelled.');
+          this.$toast.info(String(this.$t('channel.shareCancelled')));
         } else if (name === 'NotFoundError') {
-          this.$toast.error('공유할 수 있는 화면을 찾지 못했습니다. / No screen available to share.');
+          this.$toast.error(String(this.$t('channel.noScreen')));
         } else {
-          this.$toast.error('화면을 가져오지 못했습니다. / Failed to capture the screen.');
+          this.$toast.error(String(this.$t('channel.captureFailed')));
         }
         this.$router.push('/');
         return;
@@ -663,7 +717,7 @@ export default defineComponent({
       const videoTrack = this.stream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.onended = () => {
-          this.$toast.info('화면 공유를 종료했습니다. / You stopped sharing.');
+          this.$toast.info(String(this.$t('channel.hostStopped')));
           this.$router.push('/');
         };
       }
@@ -671,6 +725,7 @@ export default defineComponent({
       this.videoElement.srcObject = this.stream;
 
       await this.initializeWebSocket(authorizationToken);
+      this.startAdaptiveBitrate();
     },
     async captureDisplay(): Promise<MediaStream> {
       try {
@@ -694,10 +749,7 @@ export default defineComponent({
 
       // Compatibility: RTCPeerConnection must exist to receive the stream.
       if (typeof RTCPeerConnection === 'undefined') {
-        alert(
-          '이 브라우저에서는 WebRTC를 지원하지 않아 화면을 볼 수 없습니다. 최신 브라우저를 사용해 주세요.\n' +
-          'This browser does not support WebRTC, so the shared screen cannot be viewed. Please use a modern browser.'
-        );
+        alert(String(this.$t('channel.webrtcUnsupported')));
         this.$router.push('/');
         return;
       }
@@ -714,15 +766,15 @@ export default defineComponent({
         })
         .catch(async (error: HttpApiError) => {
           if (error.isUnauthorized()) {
-            this.$toast.error('Please check the channel password.');
-            const password = prompt('Please enter the sharing channel password.');
+            this.$toast.error(String(this.$t('join.invalidPassword')));
+            const password = prompt(String(this.$t('publicList.passwordPrompt')));
             if (password) {
               await this.joinChannel(channelId, password);
             } else {
               this.$router.push('/');
             }
           } else if (error.isNotFound()) {
-            this.$toast.error('This channel does not exist.');
+            this.$toast.error(String(this.$t('join.notFound')));
             this.$router.push('/');
           } else {
             this.$router.push('/');
@@ -734,7 +786,7 @@ export default defineComponent({
     },
     copyShareLink() {
       navigator.clipboard.writeText(`${process.env.VUE_APP_BASE_URI}/screen-sharing/${this.channelId}`);
-      this.$toast.success('The link has been copied to the clipboard.');
+      this.$toast.success(String(this.$t('channel.linkCopied')));
     },
   },
   async mounted() {
@@ -765,6 +817,10 @@ export default defineComponent({
     this.clearConnectTimeout();
     this.disconnectTimers.forEach((handle) => window.clearTimeout(handle));
     this.disconnectTimers.clear();
+    if (this.adaptIntervalHandle) {
+      window.clearInterval(this.adaptIntervalHandle);
+      this.adaptIntervalHandle = 0;
+    }
     this.stopStatsMonitor();
     this.rtcPeerConnections.forEach((peer) => peer.close());
     this.rtcPeerConnections.clear();

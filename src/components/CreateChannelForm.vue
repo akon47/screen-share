@@ -1,20 +1,29 @@
 <template>
   <div class="form-container">
     <div class="form-wrapper">
-      <div class="form-title">New Sharing</div>
+      <div class="form-title">{{ $t('create.title') }}</div>
+      <div>
+        <input :disabled="isLoading"
+               type="text" id="channel-title" v-model="title" :placeholder="$t('create.titlePlaceholder')" maxlength="100"/>
+      </div>
       <div>
         <input :class="{'invalid': password && !isPasswordValid}"
                :disabled="isLoading"
-               type="text" id="channel-password" v-model="password" placeholder="Sharing Channel Password" maxlength="16"/>
+               type="text" id="channel-password" v-model="password" :placeholder="$t('create.passwordPlaceholder')" maxlength="16"/>
       </div>
+      <label class="public-toggle">
+        <input type="checkbox" :disabled="isLoading" v-model="isPublic"/>
+        <span>{{ $t('create.makePublic') }}</span>
+      </label>
+      <div class="public-hint">{{ $t('create.makePublicHint') }}</div>
       <button :disabled="!isPasswordValid || isLoading"
               @click="creatingSharingChannel">
-        Create
+        {{ $t('create.create') }}
       </button>
       <div class="footer-message">
-        Want to join a sharing channel?
+        {{ $t('create.joinPrompt') }}
         <router-link to="/screen-sharing/join-channel">
-          Join Sharing
+          {{ $t('create.goJoin') }}
         </router-link>
       </div>
     </div>
@@ -30,7 +39,9 @@ export default defineComponent({
   name: 'CreateChannelForm',
   data() {
     return {
+      title: '',
       password: '',
+      isPublic: false,
       isLoading: false,
     };
   },
@@ -44,6 +55,8 @@ export default defineComponent({
       this.isLoading = true;
       createSharingChannel({
         password: this.password,
+        title: this.title.trim() || null,
+        isPublic: this.isPublic,
       })
       .then((createSharingChannelResponse) => {
         this.$router.push(`/screen-sharing/${createSharingChannelResponse.channelId}?hostToken=${createSharingChannelResponse.hostToken}`);
@@ -61,5 +74,23 @@ export default defineComponent({
 
 <style scoped>
 
+.public-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.public-toggle input {
+  width: auto;
+  cursor: pointer;
+}
+
+.public-hint {
+  font-size: 0.85em;
+  color: var(--sub-color, #888);
+  line-height: 1.4;
+}
 
 </style>

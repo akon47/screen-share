@@ -1,0 +1,207 @@
+import { createI18n } from 'vue-i18n';
+
+const STORAGE_KEY = 'locale';
+
+function resolveInitialLocale(): string {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === 'ko' || saved === 'en') {
+    return saved;
+  }
+  return navigator.language?.toLowerCase().startsWith('ko') ? 'ko' : 'en';
+}
+
+const messages = {
+  ko: {
+    common: {
+      appTitle: 'Screen Share',
+      cancel: '취소',
+      retry: '다시 시도',
+      leave: '나가기',
+    },
+    home: {
+      title: '화면 공유',
+      newSharing: '새 공유 시작',
+      joinSharing: '공유 참여',
+      browsePublic: '공개방 둘러보기',
+    },
+    create: {
+      title: '새 공유',
+      titlePlaceholder: '방 제목 (선택)',
+      passwordPlaceholder: '공유 채널 비밀번호 (선택)',
+      makePublic: '공개방으로 등록',
+      makePublicHint: '체크하면 다른 사람이 공개방 목록에서 이 방을 찾아 들어올 수 있습니다.',
+      create: '만들기',
+      joinPrompt: '공유 채널에 참여하시겠어요?',
+      goJoin: '공유 참여',
+    },
+    join: {
+      title: '공유 참여',
+      channelIdPlaceholder: '공유 채널 ID',
+      passwordPlaceholder: '공유 채널 비밀번호',
+      join: '참여',
+      createPrompt: '공유 채널을 만들고 싶으세요?',
+      goCreate: '새 공유',
+      invalidPassword: '채널 비밀번호를 확인해 주세요.',
+      notFound: '존재하지 않는 채널입니다.',
+    },
+    publicList: {
+      title: '공개방 목록',
+      refresh: '새로고침',
+      empty: '현재 공개된 방이 없습니다.',
+      loading: '공개방을 불러오는 중…',
+      untitled: '(제목 없음)',
+      locked: '비밀번호',
+      open: '공개',
+      viewers: '{count}명 접속',
+      join: '입장',
+      passwordPrompt: '이 방의 비밀번호를 입력해 주세요.',
+      goCreate: '새 공유 만들기',
+    },
+    channel: {
+      copyLink: '공유 링크 복사',
+      linkCopied: '링크가 클립보드에 복사되었습니다.',
+      exit: '나가기',
+      fullscreen: '전체화면',
+      hostMute: '오디오 끄기',
+      hostUnmute: '오디오 켜기',
+      guestMute: '소리 끄기',
+      guestUnmute: '소리 켜기',
+      noAudio: '공유 중인 오디오가 없습니다.',
+      qualityLabel: '화질',
+      qualityAuto: '자동',
+      qualityHigh: '높음 (1080p)',
+      qualityMedium: '보통 (720p)',
+      qualityLow: '낮음 (480p)',
+      qualityApplied: '화질 설정을 적용했습니다.',
+      qualityUnsupported: '이 브라우저/화면 소스에서는 화질 변경을 지원하지 않습니다.',
+      viewers: '시청자',
+      preparing: '화면을 준비하는 중입니다…',
+      connecting: '호스트와 연결하는 중입니다…',
+      reconnecting: '연결이 불안정하여 재연결하는 중입니다…',
+      qualityGood: '양호',
+      qualityFair: '보통',
+      qualityPoor: '나쁨',
+      failedTitle: '화면을 불러올 수 없습니다',
+      failedDetail: 'P2P 직접 연결에 실패했습니다. 양쪽 네트워크의 방화벽이나 NAT 제한(예: 회사·학교 네트워크, 대칭형 NAT) 때문일 수 있습니다. 이 서비스는 중계(TURN) 서버를 운영하지 않아 직접 연결만 지원합니다.',
+      failedHint: '👉 모바일 핫스팟 등 다른 네트워크에서 다시 시도하면 연결될 수 있습니다.',
+      endedTitle: '화면 공유가 종료되었습니다',
+      endedDetail: '호스트가 공유를 종료했습니다.',
+      hostStopped: '화면 공유를 종료했습니다.',
+      hostLeft: '호스트가 공유를 종료했습니다.',
+      shareCancelled: '화면 공유가 취소되었습니다.',
+      noScreen: '공유할 수 있는 화면을 찾지 못했습니다.',
+      captureFailed: '화면을 가져오지 못했습니다.',
+      viewerConnected: '시청자와 연결되었습니다.',
+      viewerFailed: '한 시청자와 P2P 연결에 실패했습니다 (네트워크 제한).',
+      signalingFailed: '시그널링 서버에 연결할 수 없습니다.',
+      hostUnsupported: '이 브라우저에서는 화면 공유(호스트)를 지원하지 않습니다.\nPC의 최신 Chrome, Edge, Firefox, 또는 Safari를 사용해 주세요. (iOS/모바일은 화면 송출을 지원하지 않습니다.)',
+      webrtcUnsupported: '이 브라우저에서는 WebRTC를 지원하지 않아 화면을 볼 수 없습니다. 최신 브라우저를 사용해 주세요.',
+    },
+  },
+  en: {
+    common: {
+      appTitle: 'Screen Share',
+      cancel: 'Cancel',
+      retry: 'Retry',
+      leave: 'Leave',
+    },
+    home: {
+      title: 'Screen Sharing',
+      newSharing: 'New Sharing',
+      joinSharing: 'Join Sharing',
+      browsePublic: 'Browse Public Rooms',
+    },
+    create: {
+      title: 'New Sharing',
+      titlePlaceholder: 'Room title (optional)',
+      passwordPlaceholder: 'Sharing Channel Password (optional)',
+      makePublic: 'List as a public room',
+      makePublicHint: 'When checked, others can find and join this room from the public room list.',
+      create: 'Create',
+      joinPrompt: 'Want to join a sharing channel?',
+      goJoin: 'Join Sharing',
+    },
+    join: {
+      title: 'Join Sharing',
+      channelIdPlaceholder: 'Sharing Channel Id',
+      passwordPlaceholder: 'Sharing Channel Password',
+      join: 'Join',
+      createPrompt: 'Want to create a sharing channel?',
+      goCreate: 'New Sharing',
+      invalidPassword: 'Please check the channel password.',
+      notFound: 'This channel does not exist.',
+    },
+    publicList: {
+      title: 'Public Rooms',
+      refresh: 'Refresh',
+      empty: 'There are no public rooms right now.',
+      loading: 'Loading public rooms…',
+      untitled: '(Untitled)',
+      locked: 'Password',
+      open: 'Open',
+      viewers: '{count} online',
+      join: 'Join',
+      passwordPrompt: 'Please enter the password for this room.',
+      goCreate: 'Create a new sharing',
+    },
+    channel: {
+      copyLink: 'Copy Share Link',
+      linkCopied: 'The link has been copied to the clipboard.',
+      exit: 'Exit',
+      fullscreen: 'Fullscreen',
+      hostMute: 'Mute',
+      hostUnmute: 'Unmute',
+      guestMute: 'Mute',
+      guestUnmute: 'Unmute',
+      noAudio: 'No audio is being shared.',
+      qualityLabel: 'Quality',
+      qualityAuto: 'Auto',
+      qualityHigh: 'High (1080p)',
+      qualityMedium: 'Medium (720p)',
+      qualityLow: 'Low (480p)',
+      qualityApplied: 'Quality updated.',
+      qualityUnsupported: 'Quality change is not supported on this browser/screen source.',
+      viewers: 'Viewers',
+      preparing: 'Preparing the screen…',
+      connecting: 'Connecting to the host…',
+      reconnecting: 'Connection unstable, reconnecting…',
+      qualityGood: 'Good',
+      qualityFair: 'Fair',
+      qualityPoor: 'Poor',
+      failedTitle: 'Unable to load the shared screen',
+      failedDetail: 'A direct peer-to-peer connection could not be established. This is usually caused by firewall or NAT restrictions on one side (e.g. corporate/school networks, symmetric NAT). This service does not operate a relay (TURN) server, so only direct connections are supported.',
+      failedHint: '👉 Try again on a different network (e.g. a mobile hotspot).',
+      endedTitle: 'The screen sharing has ended',
+      endedDetail: 'The host has stopped sharing.',
+      hostStopped: 'You stopped sharing.',
+      hostLeft: 'The host stopped sharing.',
+      shareCancelled: 'Screen sharing was cancelled.',
+      noScreen: 'No screen available to share.',
+      captureFailed: 'Failed to capture the screen.',
+      viewerConnected: 'A viewer connected.',
+      viewerFailed: 'Failed to connect to a viewer (network restricted).',
+      signalingFailed: 'Cannot reach the signaling server.',
+      hostUnsupported: 'Screen sharing (host) is not supported in this browser.\nPlease use a recent desktop Chrome, Edge, Firefox or Safari. (iOS / mobile cannot capture the screen.)',
+      webrtcUnsupported: 'This browser does not support WebRTC, so the shared screen cannot be viewed. Please use a modern browser.',
+    },
+  },
+};
+
+const i18n = createI18n({
+  legacy: true,
+  globalInjection: true,
+  locale: resolveInitialLocale(),
+  fallbackLocale: 'en',
+  messages,
+});
+
+export function setLocale(locale: 'ko' | 'en') {
+  i18n.global.locale = locale as any;
+  localStorage.setItem(STORAGE_KEY, locale);
+}
+
+export function getLocale(): string {
+  return i18n.global.locale as unknown as string;
+}
+
+export default i18n;
