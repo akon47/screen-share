@@ -1,8 +1,14 @@
 <template>
   <div class="screen-sharing-channel-container">
-    <div class="video-container">
+    <div class="video-container" :class="{ 'controls-hidden': showVideo && !controlsVisible }"
+         @mousemove="revealControls" @mouseleave="hideControls">
       <!-- Remote/local video -->
-      <video v-show="showVideo" ref="video" playsinline autoplay muted/>
+      <video v-show="showVideo" ref="video" playsinline autoplay muted @click="toggleControls"/>
+
+      <!-- Floating emoji reactions -->
+      <div class="reaction-layer">
+        <span v-for="r in reactions" :key="r.id" class="reaction-emoji" :style="{ left: r.left + '%' }">{{ r.emoji }}</span>
+      </div>
 
       <!-- Connection quality badge -->
       <div v-if="showVideo && quality" class="quality-badge" :class="quality.level" :title="quality.tooltip">
@@ -15,9 +21,28 @@
         {{ connectionInfo.relay ? '🔁' : '↔' }} {{ connectionInfo.label }}
       </div>
 
-      <!-- Host: connected viewer count -->
-      <div v-if="showVideo && isHost" class="viewer-badge" :title="$t('channel.viewers')">
+      <!-- Presenter: connected viewer count -->
+      <div v-if="showVideo && isPresenting" class="viewer-badge" :title="$t('channel.viewers')">
         👁 {{ connectedViewerCount }}
+      </div>
+
+      <!-- Host: incoming "let me present" request -->
+      <div v-if="presentRequest" class="present-request-banner">
+        <span class="present-request-text">🙋 {{ $t('channel.presentRequestMsg', { name: requesterLabel }) }}</span>
+        <div class="present-request-actions">
+          <button @click="approvePresentRequest">{{ $t('channel.approve') }}</button>
+          <button class="secondary" @click="denyPresentRequest">{{ $t('channel.deny') }}</button>
+        </div>
+      </div>
+
+      <!-- Presenter: needs a user gesture to start capturing -->
+      <div v-if="isPresenting && awaitingCapture" class="status-overlay">
+        <div class="overlay-icon">🖥</div>
+        <div class="overlay-title">{{ $t('channel.startPresentTitle') }}</div>
+        <div class="overlay-actions">
+          <button @click="startCaptureFromButton">{{ $t('channel.startPresent') }}</button>
+          <button class="secondary" @click="partChannel">{{ $t('common.leave') }}</button>
+        </div>
       </div>
 
       <!-- Status / error overlay -->
@@ -33,25 +58,45 @@
         </div>
       </div>
 
-      <div v-show="showVideo" class="video-footer">
+      <div v-show="showVideo" class="video-controls" :class="{ visible: controlsVisible }"
+           @mouseenter="keepControls" @mouseleave="revealControls">
         <div class="footer-left">
           <button @click="copyShareLink">{{ $t('channel.copyLink') }}</button>
+          <button @click="openQr">🔳 {{ $t('channel.qr') }}</button>
           <button @click="toggleMute">{{ muteLabel }}</button>
           <button v-if="isFullscreenSupported" @click="toggleFullscreen">⛶ {{ $t('channel.fullscreen') }}</button>
-          <select v-if="isHost" v-model="selectedQuality" @change="applyQuality" class="quality-select" :title="$t('channel.qualityLabel')">
+          <button v-if="canRequestPresent" @click="requestPresent">🖐 {{ $t('channel.requestPresent') }}</button>
+          <button v-if="canTakePresent" @click="takePresenting">🖥 {{ $t('channel.takePresent') }}</button>
+          <button v-if="canStopPresent" @click="stopPresenting">⏹ {{ $t('channel.stopPresent') }}</button>
+          <select v-if="isPresenting" v-model="selectedQuality" @change="applyQuality" class="quality-select" :title="$t('channel.qualityLabel')">
             <option value="auto">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityAuto') }}</option>
             <option value="high">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityHigh') }}</option>
             <option value="medium">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityMedium') }}</option>
             <option value="low">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityLow') }}</option>
           </select>
+          <div class="reaction-bar">
+            <button v-for="e in reactionEmojis" :key="e" class="reaction-btn" @click="sendReaction(e)">{{ e }}</button>
+          </div>
         </div>
         <div class="footer-buttons">
           <button @click="partChannel">{{ $t('channel.exit') }}</button>
         </div>
       </div>
+
+      <!-- QR code modal -->
+      <div v-if="showQr" class="qr-modal" @click.self="showQr = false">
+        <div class="qr-card">
+          <div class="qr-title">{{ $t('channel.qrTitle') }}</div>
+          <img v-if="qrDataUrl" :src="qrDataUrl" alt="QR code" class="qr-image"/>
+          <div class="qr-link">{{ shareLink }}</div>
+          <button @click="showQr = false">{{ $t('common.leave') }}</button>
+        </div>
+      </div>
     </div>
     <div v-if="isJoined" class="user-container">
-      <user-form class="user-form" :token="token" :channel-id="channelId" :update-key="userUpdateKey"/>
+      <user-form class="user-form" :token="token" :channel-id="channelId" :update-key="userUpdateKey"
+                 :is-host="isHost" :presenter-id="presenterId"
+                 @kick="onKickUser" @set-presenter="onSetPresenterUser"/>
       <message-form :token="token" :channel-id="channelId" :new-simple-message="newSimpleMessage" :updated-user="lastUpdatedUser"/>
     </div>
   </div>
@@ -59,13 +104,14 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue';
-import { joinSharingChannel, getTurnCredentials } from '@/api/sharing';
+import { joinSharingChannel, getTurnCredentials, getChannelUsers } from '@/api/sharing';
 import SignalingWebSocketClient from '@/utils/websocket';
 import { HttpApiError } from '@/api/common/httpApiClient';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 import MessageForm from '@/components/MessageForm.vue';
 import { ChannelUserDto, SimpleMessageDto } from '@/api/models/sharing.dtos';
 import UserForm from '@/components/UserForm.vue';
+import QRCode from 'qrcode';
 
 // Phase of the connection from the perspective of the local user.
 type ConnectionPhase = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed' | 'ended';
@@ -75,14 +121,19 @@ type ConnectionPhase = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'f
 const INITIAL_CONNECT_TIMEOUT_MS = 20000;
 // Grace period after an established connection drops before we give up on it.
 const DISCONNECT_GRACE_MS = 8000;
-// Maximum number of ICE-restart attempts the host performs per viewer.
+// Maximum number of ICE-restart attempts the presenter performs per viewer.
 const MAX_ICE_RESTARTS = 2;
 // Quality stats sampling interval.
 const STATS_INTERVAL_MS = 2000;
-// Adaptive bitrate sampling interval (host side).
+// Adaptive bitrate sampling interval (presenter side).
 const ADAPT_INTERVAL_MS = 4000;
-// Adaptive bitrate ladder: from most degraded to full quality. The host moves
-// each viewer up/down this ladder based on the packet loss they report back.
+// How long a captured-but-not-yet-approved stream is kept before being dropped.
+const PENDING_STREAM_TIMEOUT_MS = 45000;
+// How long a floating reaction emoji stays on screen.
+const REACTION_LIFETIME_MS = 2600;
+
+// Adaptive bitrate ladder: from most degraded to full quality. The presenter
+// moves each viewer up/down this ladder based on the packet loss they report.
 const BITRATE_LEVELS: { maxBitrate: number; scaleDown: number }[] = [
   { maxBitrate: 300_000, scaleDown: 4 },
   { maxBitrate: 600_000, scaleDown: 2 },
@@ -91,13 +142,29 @@ const BITRATE_LEVELS: { maxBitrate: number; scaleDown: number }[] = [
   { maxBitrate: 5_000_000, scaleDown: 1 },
 ];
 
-// Resolution / frame-rate presets used by the host quality selector.
+// Resolution / frame-rate presets used by the presenter quality selector.
 const QUALITY_PRESETS: { [preset: string]: any } = {
   auto: {},
   high: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
   medium: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
   low: { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 15 } },
 };
+
+// Available emoji reactions.
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '👏', '🎉'];
+
+// Extract the user id (JWT subject) from the auth token, without verifying it.
+function decodeUserId(token: string): string {
+  try {
+    let base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    return JSON.parse(atob(base64)).sub ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export default defineComponent({
   name: 'ScreenSharingChannelView',
@@ -126,10 +193,31 @@ export default defineComponent({
     token(): string {
       return this.hostToken ?? this.guestToken ?? '';
     },
+    // Whether the local user is the one currently sending media.
+    isPresenting(): boolean {
+      return !!this.myUserId && this.presenterId === this.myUserId;
+    },
+    canRequestPresent(): boolean {
+      return this.isGuest && !this.isPresenting;
+    },
+    canTakePresent(): boolean {
+      return this.isHost && !this.isPresenting;
+    },
+    canStopPresent(): boolean {
+      // A guest presenter can hand presenting back to the host.
+      return this.isPresenting && !this.isHost;
+    },
+    requesterLabel(): string {
+      const id = this.presentRequest?.userId ?? '';
+      return id ? (id.split('-').pop() ?? id) : '';
+    },
+    shareLink(): string {
+      return `${process.env.VUE_APP_BASE_URI}/screen-sharing/${this.channelId}`;
+    },
     // Whether the <video> element should be visible.
     showVideo(): boolean {
-      if (this.isHost) {
-        return !this.isLoading;
+      if (this.isPresenting) {
+        return this.localCaptureActive && !this.isLoading;
       }
       return this.phase === 'connected';
     },
@@ -149,7 +237,7 @@ export default defineComponent({
       };
     },
     muteLabel(): string {
-      if (this.isHost) {
+      if (this.isPresenting) {
         return this.audioEnabled ? `🔊 ${this.$t('channel.hostMute')}` : `🔇 ${this.$t('channel.hostUnmute')}`;
       }
       return this.audioMuted ? `🔇 ${this.$t('channel.guestUnmute')}` : `🔊 ${this.$t('channel.guestMute')}`;
@@ -157,15 +245,15 @@ export default defineComponent({
     // Drives the status / error overlay shown over the video area.
     overlay(): { show: boolean; kind: string; title: string; detail: string; hint: string; showRetry: boolean } {
       const t = (key: string) => String(this.$t(key));
-      // Host: only block the view while the local screen is being captured.
-      if (this.isHost) {
+      // Presenter: only block the view while the local screen is being captured.
+      if (this.isPresenting) {
         if (this.isLoading) {
           return { show: true, kind: 'loading', title: t('channel.preparing'), detail: '', hint: '', showRetry: false };
         }
         return { show: false, kind: '', title: '', detail: '', hint: '', showRetry: false };
       }
 
-      // Guest perspective.
+      // Viewer perspective.
       switch (this.phase) {
         case 'connecting':
           return { show: true, kind: 'loading', title: t('channel.connecting'), detail: '', hint: '', showRetry: false };
@@ -198,11 +286,16 @@ export default defineComponent({
     return {
       videoElement: {} as HTMLVideoElement,
       stream: {} as MediaStream,
+      // A screen captured on the "request to present" / "take presenting" click,
+      // held until the presenter handoff is confirmed by the server.
+      pendingStream: null as null | MediaStream,
+      pendingStreamTimer: 0 as number,
+      // Whether the local user is actively capturing their screen.
+      localCaptureActive: false,
       rtcPeerConnections: new Map<string, RTCPeerConnection>(),
       rtcConfiguration: {
-        // NOTE: Only STUN servers are configured on purpose — no TURN relay is
-        // operated. Connections that cannot traverse NAT/firewalls will fail,
-        // and the UI surfaces that to the user instead of hanging silently.
+        // NOTE: Only STUN servers are configured by default — TURN credentials,
+        // if available, are fetched and appended at runtime.
         iceServers: [
           {
             urls: [
@@ -221,22 +314,30 @@ export default defineComponent({
       userUpdateKey: {},
       isLoading: false,
       isJoined: false,
-      // Connection phase (guest view / overall).
+      // Identity / presenter tracking.
+      myUserId: '',
+      presenterId: '',
+      // A pending "let me present" request shown to the host.
+      presentRequest: null as null | { userId: string },
+      // True when we've been made presenter but still need a user gesture to
+      // start screen capture (e.g. presenting was handed back to the host).
+      awaitingCapture: false,
+      // Connection phase (viewer view / overall).
       phase: 'idle' as ConnectionPhase,
       // Per-peer RTCPeerConnection.connectionState, keyed by userId (reactive).
       peerStates: {} as Record<string, string>,
-      // ICE-restart attempt counter per peer (host side).
+      // ICE-restart attempt counter per peer (presenter side).
       iceRestartCounts: new Map<string, number>(),
       // Pending disconnect-grace timers per peer.
       disconnectTimers: new Map<string, number>(),
-      // Initial-connect timeout handle (guest side).
+      // Initial-connect timeout handle (viewer side).
       connectTimeoutHandle: 0 as number,
       // Audio state.
-      audioMuted: true, // guest: local playback muted (required for autoplay)
-      audioEnabled: true, // host: outgoing audio track enabled
+      audioMuted: true, // viewer: local playback muted (required for autoplay)
+      audioEnabled: true, // presenter: outgoing audio track enabled
       // Fullscreen support flag.
       isFullscreenSupported: false,
-      // Host quality preset.
+      // Presenter quality preset.
       selectedQuality: 'auto',
       // Connection quality stats.
       quality: null as null | { level: string; label: string; tooltip: string },
@@ -245,12 +346,64 @@ export default defineComponent({
       statsIntervalHandle: 0 as number,
       statsPrev: null as null | { bytes: number; timestamp: number },
       monitoredPeer: null as null | RTCPeerConnection,
-      // Adaptive bitrate (host): per-viewer quality level index.
+      // Adaptive bitrate (presenter): per-viewer quality level index.
       adaptIntervalHandle: 0 as number,
       peerQualityLevels: new Map<string, number>(),
+      // Emoji reactions.
+      reactionEmojis: REACTION_EMOJIS,
+      reactions: [] as { id: number; emoji: string; left: number }[],
+      reactionSeq: 0,
+      // QR code modal.
+      showQr: false,
+      qrDataUrl: '',
+      // YouTube-style auto-hiding overlay controls.
+      controlsVisible: true,
+      controlsHideTimer: 0 as number,
     };
   },
+  watch: {
+    // When the video first appears, show the controls then start the auto-hide.
+    showVideo(visible: boolean) {
+      if (visible) {
+        this.revealControls();
+      }
+    },
+  },
   methods: {
+    // ---- Overlay controls visibility --------------------------------------
+    // Reveal the controls and schedule them to fade out after inactivity.
+    revealControls() {
+      this.controlsVisible = true;
+      if (this.controlsHideTimer) {
+        window.clearTimeout(this.controlsHideTimer);
+      }
+      this.controlsHideTimer = window.setTimeout(() => {
+        this.controlsVisible = false;
+      }, 3000);
+    },
+    // Keep the controls pinned while the pointer is over them.
+    keepControls() {
+      this.controlsVisible = true;
+      if (this.controlsHideTimer) {
+        window.clearTimeout(this.controlsHideTimer);
+        this.controlsHideTimer = 0;
+      }
+    },
+    hideControls() {
+      if (this.controlsHideTimer) {
+        window.clearTimeout(this.controlsHideTimer);
+        this.controlsHideTimer = 0;
+      }
+      this.controlsVisible = false;
+    },
+    // Tap-to-toggle for touch devices (no hover).
+    toggleControls() {
+      if (this.controlsVisible) {
+        this.hideControls();
+      } else {
+        this.revealControls();
+      }
+    },
     // ---- Peer connection setup --------------------------------------------
     createPeerConnection(userId: string): RTCPeerConnection {
       const peerConnection = new RTCPeerConnection(this.rtcConfiguration);
@@ -263,7 +416,7 @@ export default defineComponent({
         console.log(`IceConnectionState(${userId}): ${peerConnection.iceConnectionState}`);
         // ICE "failed" is the canonical signal that the direct path is dead.
         if (peerConnection.iceConnectionState === 'failed') {
-          if (this.isHost) {
+          if (this.isPresenting) {
             this.tryRestartIce(userId, peerConnection);
           }
         }
@@ -276,11 +429,52 @@ export default defineComponent({
 
       return peerConnection;
     },
+    // A peer connection over which the local user sends media (presenter side).
+    createSenderPeer(userId: string): RTCPeerConnection {
+      const peer = this.createPeerConnection(userId);
+      this.rtcPeerConnections.set(userId, peer);
+      this.iceRestartCounts.set(userId, 0);
+      peer.onicecandidate = (ev) => {
+        if (ev.candidate) {
+          this.signalingWebSocketClient.relayIceCandidate(userId, ev.candidate);
+        }
+      };
+      if (this.stream instanceof MediaStream) {
+        this.stream.getTracks().forEach((track) => peer.addTrack(track, this.stream));
+      }
+      return peer;
+    },
+    // A peer connection over which the local user receives media (viewer side).
+    createReceiverPeer(userId: string): RTCPeerConnection {
+      const peer = this.createPeerConnection(userId);
+      this.rtcPeerConnections.set(userId, peer);
+      peer.onicecandidate = (ev) => {
+        if (ev.candidate) {
+          this.signalingWebSocketClient.relayIceCandidate(userId, ev.candidate);
+        }
+      };
+      peer.ontrack = (ev) => {
+        this.stream = ev.streams[0];
+        this.videoElement.srcObject = this.stream;
+      };
+      this.startConnectTimeout();
+      return peer;
+    },
+    async offerToUser(userId: string) {
+      const peer = this.createSenderPeer(userId);
+      try {
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        this.signalingWebSocketClient.relaySessionDescription(userId, offer);
+      } catch (error) {
+        console.error('createOffer failed', error);
+      }
+    },
     handlePeerConnectionState(userId: string, peerConnection: RTCPeerConnection) {
       const state = peerConnection.connectionState;
       this.peerStates[userId] = state;
 
-      if (this.isGuest) {
+      if (!this.isPresenting) {
         switch (state) {
           case 'connected':
             this.clearConnectTimeout();
@@ -302,7 +496,7 @@ export default defineComponent({
             this.failConnection();
             break;
         }
-      } else if (this.isHost) {
+      } else {
         switch (state) {
           case 'connected':
             this.clearDisconnectTimer(userId);
@@ -354,9 +548,9 @@ export default defineComponent({
         if (peer.connectionState === 'connected') {
           return; // recovered in the meantime
         }
-        if (this.isGuest) {
+        if (!this.isPresenting) {
           this.failConnection();
-        } else if (this.isHost) {
+        } else {
           this.tryRestartIce(userId, peer);
         }
       }, DISCONNECT_GRACE_MS);
@@ -506,7 +700,7 @@ export default defineComponent({
     },
     // ---- Media controls ---------------------------------------------------
     toggleMute() {
-      if (this.isHost) {
+      if (this.isPresenting) {
         const audioTracks = this.stream instanceof MediaStream ? this.stream.getAudioTracks() : [];
         if (audioTracks.length === 0) {
           this.$toast.info(String(this.$t('channel.noAudio')));
@@ -544,7 +738,7 @@ export default defineComponent({
       }
     },
     async applyQuality() {
-      if (!this.isHost || !(this.stream instanceof MediaStream)) {
+      if (!this.isPresenting || !(this.stream instanceof MediaStream)) {
         return;
       }
       const videoTrack = this.stream.getVideoTracks()[0];
@@ -558,7 +752,7 @@ export default defineComponent({
         this.$toast.warning(String(this.$t('channel.qualityUnsupported')));
       }
     },
-    // ---- Adaptive bitrate (host) ------------------------------------------
+    // ---- Adaptive bitrate (presenter) -------------------------------------
     startAdaptiveBitrate() {
       if (this.adaptIntervalHandle) {
         return;
@@ -570,6 +764,13 @@ export default defineComponent({
           }
         });
       }, ADAPT_INTERVAL_MS);
+    },
+    stopAdaptiveBitrate() {
+      if (this.adaptIntervalHandle) {
+        window.clearInterval(this.adaptIntervalHandle);
+        this.adaptIntervalHandle = 0;
+      }
+      this.peerQualityLevels.clear();
     },
     async adaptPeerBitrate(userId: string, peer: RTCPeerConnection) {
       const sender = peer.getSenders().find((s) => s.track && s.track.kind === 'video');
@@ -617,7 +818,226 @@ export default defineComponent({
         // setParameters can fail on some browsers; ignore.
       }
     },
-    // ---- ICE servers (STUN + optional Cloudflare TURN) --------------------
+    // ---- Reactions --------------------------------------------------------
+    sendReaction(emoji: string) {
+      if (this.signalingWebSocketClient instanceof SignalingWebSocketClient) {
+        this.signalingWebSocketClient.sendReaction(emoji);
+      }
+      this.spawnReaction(emoji);
+    },
+    spawnReaction(emoji: string) {
+      const id = ++this.reactionSeq;
+      const left = 10 + Math.floor(Math.random() * 80);
+      this.reactions.push({ id, emoji, left });
+      window.setTimeout(() => {
+        this.reactions = this.reactions.filter((r) => r.id !== id);
+      }, REACTION_LIFETIME_MS);
+    },
+    // ---- QR code ----------------------------------------------------------
+    async openQr() {
+      try {
+        this.qrDataUrl = await QRCode.toDataURL(this.shareLink, { width: 240, margin: 1 });
+      } catch (error) {
+        console.error('QR generation failed', error);
+        this.qrDataUrl = '';
+      }
+      this.showQr = true;
+    },
+    // ---- Presenter handoff ------------------------------------------------
+    async requestPresent() {
+      if (this.isPresenting) {
+        return;
+      }
+      try {
+        this.pendingStream = await this.captureDisplay();
+      } catch (error: any) {
+        this.handleCaptureError(error);
+        return;
+      }
+      this.armPendingStreamTimeout();
+      this.signalingWebSocketClient.requestPresent();
+      this.$toast.info(String(this.$t('channel.presentRequested')));
+    },
+    async takePresenting() {
+      if (this.isPresenting) {
+        return;
+      }
+      try {
+        this.pendingStream = await this.captureDisplay();
+      } catch (error: any) {
+        this.handleCaptureError(error);
+        return;
+      }
+      this.armPendingStreamTimeout();
+      this.signalingWebSocketClient.setPresenter(this.myUserId);
+    },
+    stopPresenting() {
+      // A guest presenter releases presenting back to the host.
+      this.signalingWebSocketClient.setPresenter(null);
+    },
+    approvePresentRequest() {
+      if (!this.presentRequest) {
+        return;
+      }
+      this.signalingWebSocketClient.setPresenter(this.presentRequest.userId);
+      this.presentRequest = null;
+    },
+    denyPresentRequest() {
+      this.presentRequest = null;
+    },
+    armPendingStreamTimeout() {
+      this.clearPendingStreamTimeout();
+      this.pendingStreamTimer = window.setTimeout(() => {
+        // The handoff was never confirmed; stop the idle capture.
+        this.discardPendingStream();
+      }, PENDING_STREAM_TIMEOUT_MS);
+    },
+    clearPendingStreamTimeout() {
+      if (this.pendingStreamTimer) {
+        window.clearTimeout(this.pendingStreamTimer);
+        this.pendingStreamTimer = 0;
+      }
+    },
+    discardPendingStream() {
+      this.clearPendingStreamTimeout();
+      if (this.pendingStream instanceof MediaStream) {
+        this.pendingStream.getTracks().forEach((track) => track.stop());
+      }
+      this.pendingStream = null;
+    },
+    async handlePresenterChanged(newPresenterId: string) {
+      if (!newPresenterId || newPresenterId === this.presenterId) {
+        return; // no change (e.g. the server confirming our own role)
+      }
+      const firstTime = this.presenterId === '';
+      this.presenterId = newPresenterId;
+      if (firstTime) {
+        // We just learned who the initial presenter is; the normal join/offer
+        // flow already handles establishing media, so don't tear anything down.
+        return;
+      }
+      await this.switchPresenter(newPresenterId);
+    },
+    async switchPresenter(newPresenterId: string) {
+      const becomingPresenter = newPresenterId === this.myUserId;
+      this.teardownPeers();
+
+      if (this.localCaptureActive && !becomingPresenter) {
+        // We were presenting and no longer are: stop capturing our screen.
+        this.stopLocalCapture();
+      }
+
+      if (becomingPresenter) {
+        await this.beginPresenting();
+      } else {
+        // We are now a viewer: wait for the new presenter's offer.
+        this.awaitingCapture = false;
+        this.phase = 'connecting';
+        this.startConnectTimeout();
+        if (this.videoElement instanceof HTMLVideoElement) {
+          this.videoElement.srcObject = null;
+        }
+      }
+    },
+    teardownPeers() {
+      this.disconnectTimers.forEach((handle) => window.clearTimeout(handle));
+      this.disconnectTimers.clear();
+      this.iceRestartCounts.clear();
+      this.clearConnectTimeout();
+      this.stopStatsMonitor();
+      this.stopAdaptiveBitrate();
+      this.rtcPeerConnections.forEach((peer) => peer.close());
+      this.rtcPeerConnections.clear();
+      this.peerStates = {};
+    },
+    stopLocalCapture() {
+      if (this.stream instanceof MediaStream) {
+        this.stream.getTracks().forEach((track) => track.stop());
+      }
+      this.localCaptureActive = false;
+    },
+    async beginPresenting() {
+      this.clearPendingStreamTimeout();
+      const stream = this.pendingStream;
+      this.pendingStream = null;
+      if (!(stream instanceof MediaStream) || stream.getTracks().length === 0) {
+        // No pre-captured stream. Browsers require a user gesture for
+        // getDisplayMedia, so prompt the user to start the capture themselves.
+        this.awaitingCapture = true;
+        this.isLoading = false;
+        return;
+      }
+      this.awaitingCapture = false;
+      this.stream = stream;
+      this.localCaptureActive = true;
+      this.audioEnabled = true;
+      this.isLoading = false;
+      this.videoElement.srcObject = this.stream;
+
+      const videoTrack = this.stream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.onended = () => this.onLocalCaptureEnded();
+      }
+
+      await this.offerToAllMembers();
+      this.startAdaptiveBitrate();
+    },
+    // Start screen capture from a user gesture, then present (used when
+    // presenting was handed to us without a pre-captured stream).
+    async startCaptureFromButton() {
+      try {
+        this.pendingStream = await this.captureDisplay();
+      } catch (error: any) {
+        this.handleCaptureError(error);
+        return;
+      }
+      this.awaitingCapture = false;
+      await this.beginPresenting();
+    },
+    async offerToAllMembers() {
+      try {
+        const users = await getChannelUsers(this.token, this.channelId);
+        users.data
+          .filter((u) => u.id !== this.myUserId)
+          .forEach((u) => this.offerToUser(u.id));
+      } catch (error) {
+        console.error('Failed to fetch channel members for presenting', error);
+      }
+    },
+    onLocalCaptureEnded() {
+      if (this.isHost) {
+        // The host stopping the share ends the whole session.
+        this.$toast.info(String(this.$t('channel.hostStopped')));
+        this.$router.push('/');
+      } else {
+        // A guest presenter stopping hands presenting back to the host.
+        this.$toast.info(String(this.$t('channel.presentEnded')));
+        this.signalingWebSocketClient.setPresenter(null);
+      }
+    },
+    handleCaptureError(error: any) {
+      this.isLoading = false;
+      const name = error?.name;
+      if (name === 'NotAllowedError' || name === 'AbortError') {
+        this.$toast.info(String(this.$t('channel.shareCancelled')));
+      } else if (name === 'NotFoundError') {
+        this.$toast.error(String(this.$t('channel.noScreen')));
+      } else {
+        this.$toast.error(String(this.$t('channel.captureFailed')));
+      }
+    },
+    // ---- Host moderation --------------------------------------------------
+    onKickUser(userId: string) {
+      if (this.signalingWebSocketClient instanceof SignalingWebSocketClient) {
+        this.signalingWebSocketClient.kickUser(userId);
+      }
+    },
+    onSetPresenterUser(userId: string) {
+      if (this.signalingWebSocketClient instanceof SignalingWebSocketClient) {
+        this.signalingWebSocketClient.setPresenter(userId);
+      }
+    },
+    // ---- ICE servers (STUN + optional TURN) -------------------------------
     async loadIceServers() {
       // Fetch short-lived TURN credentials. Without a TURN relay, connections on
       // restrictive networks (e.g. mobile/CGNAT) fail; TURN fixes those cases.
@@ -645,14 +1065,14 @@ export default defineComponent({
       this.signalingWebSocketClient = new SignalingWebSocketClient(authorizationToken);
 
       this.signalingWebSocketClient.onerror = () => {
-        if (this.isGuest && this.phase !== 'connected') {
+        if (!this.isPresenting && this.phase !== 'connected') {
           this.$toast.error(String(this.$t('channel.signalingFailed')));
         }
       };
 
       this.signalingWebSocketClient.onchanneljoined = () => {
         this.isJoined = true;
-        if (this.isGuest) {
+        if (!this.isPresenting) {
           this.phase = 'connecting';
           this.startConnectTimeout();
         }
@@ -660,45 +1080,36 @@ export default defineComponent({
 
       this.signalingWebSocketClient.onuserjoined = (user) => {
         console.log(`onUserJoined: ${user.id}`);
-        if (this.isHost) {
-          const peer = this.createPeerConnection(user.id);
-          this.rtcPeerConnections.set(user.id, peer);
-          this.iceRestartCounts.set(user.id, 0);
-          peer.onicecandidate = (ev) => {
-            if (ev.candidate) {
-              this.signalingWebSocketClient.relayIceCandidate(user.id, ev.candidate);
-            }
-          };
-          this.stream.getTracks().forEach((track) => peer.addTrack(track, this.stream));
-          peer.createOffer()
-            .then((offer) => {
-              peer.setLocalDescription(offer);
-              this.signalingWebSocketClient.relaySessionDescription(user.id, offer);
-            });
+        this.$toast.info(String(this.$t('channel.userJoined')));
+        // Whoever is presenting offers to the newcomer.
+        if (this.isPresenting) {
+          this.offerToUser(user.id);
         }
         this.userUpdateKey = {};
       };
 
       this.signalingWebSocketClient.onuserparted = (user) => {
         console.log(`onUserParted: ${user.id}`);
+        this.$toast.info(String(this.$t('channel.userLeft')));
 
         const peer = this.rtcPeerConnections.get(user.id);
         if (peer) {
-          if (this.isHost) {
-            peer.close();
-            this.rtcPeerConnections.delete(user.id);
-            delete this.peerStates[user.id];
-            this.clearDisconnectTimer(user.id);
-            if (this.monitoredPeer === peer) {
-              this.stopStatsMonitor();
-            }
-          } else if (this.isGuest) {
-            // The host left — the share has ended.
+          peer.close();
+          this.rtcPeerConnections.delete(user.id);
+          delete this.peerStates[user.id];
+          this.iceRestartCounts.delete(user.id);
+          this.clearDisconnectTimer(user.id);
+          if (this.monitoredPeer === peer) {
             this.stopStatsMonitor();
-            this.phase = 'ended';
-            this.$toast.info(String(this.$t('channel.hostLeft')));
-            window.setTimeout(() => this.$router.push('/'), 2500);
           }
+        }
+
+        // If the host themselves left, the session is over for everyone else.
+        if (user.roleType === 'HOST' && !this.isHost) {
+          this.stopStatsMonitor();
+          this.phase = 'ended';
+          this.$toast.info(String(this.$t('channel.hostLeft')));
+          window.setTimeout(() => this.$router.push('/'), 2500);
         }
 
         this.userUpdateKey = {};
@@ -706,31 +1117,21 @@ export default defineComponent({
 
       this.signalingWebSocketClient.onrelaysessiondescription = async (userId, sessionDescription) => {
         console.log(`onRelaySessionDescription: ${userId}`);
+        const isOffer = (sessionDescription as any)?.type === 'offer';
 
-        if (this.isHost) {
-          await this.rtcPeerConnections.get(userId)?.setRemoteDescription(new RTCSessionDescription(sessionDescription));
-        } else if (this.isGuest) {
-          // Reuse an existing peer (renegotiation / ICE restart) instead of
-          // recreating it, so the media stream and ICE state are preserved.
+        if (isOffer) {
+          // Someone is offering us their media: we are a viewer of this peer.
           let peer = this.rtcPeerConnections.get(userId);
           if (!peer) {
-            peer = this.createPeerConnection(userId);
-            this.rtcPeerConnections.set(userId, peer);
-            peer.onicecandidate = (ev) => {
-              if (ev.candidate) {
-                this.signalingWebSocketClient.relayIceCandidate(userId, ev.candidate);
-              }
-            };
-            peer.ontrack = (ev) => {
-              this.stream = ev.streams[0];
-              this.videoElement.srcObject = this.stream;
-            };
-            this.startConnectTimeout();
+            peer = this.createReceiverPeer(userId);
           }
           await peer.setRemoteDescription(new RTCSessionDescription(sessionDescription));
           const answer = await peer.createAnswer();
           await peer.setLocalDescription(answer);
           this.signalingWebSocketClient.relaySessionDescription(userId, answer);
+        } else {
+          // An answer to an offer we sent as the presenter.
+          await this.rtcPeerConnections.get(userId)?.setRemoteDescription(new RTCSessionDescription(sessionDescription));
         }
       };
 
@@ -753,6 +1154,25 @@ export default defineComponent({
       this.signalingWebSocketClient.onnewmessage = (simpleMessage) => {
         this.newSimpleMessage = simpleMessage;
       };
+
+      this.signalingWebSocketClient.onreaction = (emoji) => {
+        this.spawnReaction(emoji);
+      };
+
+      this.signalingWebSocketClient.onkicked = () => {
+        this.$toast.error(String(this.$t('channel.kicked')));
+        this.phase = 'ended';
+        window.setTimeout(() => this.$router.push('/'), 1500);
+      };
+
+      this.signalingWebSocketClient.onpresentrequest = (userId) => {
+        // Only the host receives these; show an approve/deny banner.
+        this.presentRequest = { userId };
+      };
+
+      this.signalingWebSocketClient.onpresenterchanged = (presenterId) => {
+        this.handlePresenterChanged(presenterId);
+      };
     },
     async initializeHostMode(authorizationToken: string) {
       if (!authorizationToken) {
@@ -771,26 +1191,17 @@ export default defineComponent({
       try {
         this.stream = await this.captureDisplay();
       } catch (error: any) {
-        this.isLoading = false;
-        const name = error?.name;
-        if (name === 'NotAllowedError' || name === 'AbortError') {
-          this.$toast.info(String(this.$t('channel.shareCancelled')));
-        } else if (name === 'NotFoundError') {
-          this.$toast.error(String(this.$t('channel.noScreen')));
-        } else {
-          this.$toast.error(String(this.$t('channel.captureFailed')));
-        }
+        this.handleCaptureError(error);
         this.$router.push('/');
         return;
       }
 
+      this.localCaptureActive = true;
+
       // When the host stops sharing via the browser's native UI, leave cleanly.
       const videoTrack = this.stream.getVideoTracks()[0];
       if (videoTrack) {
-        videoTrack.onended = () => {
-          this.$toast.info(String(this.$t('channel.hostStopped')));
-          this.$router.push('/');
-        };
+        videoTrack.onended = () => this.onLocalCaptureEnded();
       }
 
       this.videoElement.srcObject = this.stream;
@@ -856,7 +1267,7 @@ export default defineComponent({
       this.$router.push('/');
     },
     copyShareLink() {
-      navigator.clipboard.writeText(`${process.env.VUE_APP_BASE_URI}/screen-sharing/${this.channelId}`);
+      navigator.clipboard.writeText(this.shareLink);
       this.$toast.success(String(this.$t('channel.linkCopied')));
     },
   },
@@ -871,6 +1282,7 @@ export default defineComponent({
       return;
     }
 
+    this.myUserId = decodeUserId(this.token);
     this.isLoading = true;
 
     this.videoElement = this.$refs.video as HTMLVideoElement;
@@ -879,24 +1291,30 @@ export default defineComponent({
     };
 
     if (this.hostToken) {
+      // The host starts as the presenter; the server confirms this on join.
+      this.presenterId = this.myUserId;
       await this.initializeHostMode(this.hostToken);
     } else if (this.guestToken) {
       await this.initializeGuestMode(this.guestToken);
     }
   },
   unmounted() {
+    if (this.controlsHideTimer) {
+      window.clearTimeout(this.controlsHideTimer);
+    }
     this.clearConnectTimeout();
+    this.clearPendingStreamTimeout();
     this.disconnectTimers.forEach((handle) => window.clearTimeout(handle));
     this.disconnectTimers.clear();
-    if (this.adaptIntervalHandle) {
-      window.clearInterval(this.adaptIntervalHandle);
-      this.adaptIntervalHandle = 0;
-    }
+    this.stopAdaptiveBitrate();
     this.stopStatsMonitor();
     this.rtcPeerConnections.forEach((peer) => peer.close());
     this.rtcPeerConnections.clear();
     if (this.stream instanceof MediaStream) {
       this.stream.getTracks().forEach(track => track.stop());
+    }
+    if (this.pendingStream instanceof MediaStream) {
+      this.pendingStream.getTracks().forEach(track => track.stop());
     }
     if (this.signalingWebSocketClient instanceof SignalingWebSocketClient) {
       this.signalingWebSocketClient.close();
@@ -920,15 +1338,11 @@ export default defineComponent({
   width: 100%;
   height: 100%;
   position: relative;
-
-  --video-footer-height: 60px;
-
-  display: grid;
-  grid-template-columns: 100%;
-  grid-template-rows: calc(100% - var(--video-footer-height)) var(--video-footer-height);
 }
 
 .video-container video {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
 
@@ -936,20 +1350,55 @@ export default defineComponent({
   background: #202020;
 }
 
-.video-container button {
-  font-size: 1em;
-  padding: 8px;
-  min-width: 80px;
+/* Hide the cursor when the auto-hiding controls are hidden (immersive view). */
+.video-container.controls-hidden {
+  cursor: none;
 }
 
-.video-footer {
+/* YouTube-style controls overlaid on the bottom of the video. */
+.video-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: 1fr;
 
   align-items: center;
-  padding: 0 10px;
+  padding: 28px 14px 12px;
   gap: 8px;
+
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.35) 55%, rgba(0, 0, 0, 0) 100%);
+
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.video-controls.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.video-controls button {
+  font-size: 0.95em;
+  padding: 7px 10px;
+  min-width: 0;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.video-controls button:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .footer-left {
@@ -961,13 +1410,63 @@ export default defineComponent({
 }
 
 .quality-select {
-  font-size: 0.95em;
-  padding: 7px;
+  font-size: 0.9em;
+  padding: 6px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
 }
 
-.video-footer .footer-buttons {
+.quality-select option {
+  color: #202020;
+}
+
+.video-controls .footer-buttons {
   display: flex;
   align-items: center;
+}
+
+/* Emoji reaction bar */
+.reaction-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.reaction-bar .reaction-btn {
+  font-size: 1.1em;
+  min-width: 0;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.reaction-bar .reaction-btn:hover {
+  transform: scale(1.25);
+}
+
+/* Floating reactions over the video */
+.reaction-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.reaction-emoji {
+  position: absolute;
+  bottom: 10px;
+  font-size: 2.4em;
+  animation: reaction-rise 2.6s ease-out forwards;
+}
+
+@keyframes reaction-rise {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  15% { opacity: 1; transform: translateY(-10%) scale(1); }
+  100% { transform: translateY(-90vh) scale(1.2); opacity: 0; }
 }
 
 /* Connection quality badge */
@@ -1036,13 +1535,94 @@ export default defineComponent({
   pointer-events: none;
 }
 
+/* "Let me present" request banner (host) */
+.present-request-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 24px);
+
+  padding: 8px 14px;
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(20, 20, 20, 0.88);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.present-request-text {
+  font-size: 0.9em;
+}
+
+.present-request-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.present-request-actions button {
+  font-size: 0.85em;
+  min-width: 0;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.present-request-actions button.secondary {
+  background: transparent;
+  color: #f0f0f0;
+  border: 1px solid #888;
+}
+
+/* QR modal */
+.qr-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+
+  padding: 22px;
+  border-radius: 12px;
+  background: #fff;
+  color: #202020;
+  max-width: 320px;
+}
+
+.qr-title {
+  font-weight: 600;
+  font-size: 1.05em;
+}
+
+.qr-image {
+  width: 240px;
+  height: 240px;
+}
+
+.qr-link {
+  font-size: 0.8em;
+  color: #555;
+  word-break: break-all;
+  text-align: center;
+}
+
 /* Status / error overlay */
 .status-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: var(--video-footer-height);
+  inset: 0;
   z-index: 3;
 
   display: flex;
@@ -1123,16 +1703,12 @@ export default defineComponent({
     grid-template-rows: minmax(180px, 42vh) minmax(0, 1fr);
   }
 
-  .video-container {
-    --video-footer-height: 92px;
-  }
-
-  .video-footer {
-    padding: 6px 8px;
+  .video-controls {
+    padding: 22px 8px 8px;
     gap: 6px;
   }
 
-  .video-container button {
+  .video-controls button {
     font-size: 0.8em;
     padding: 6px 8px;
     min-width: 0;

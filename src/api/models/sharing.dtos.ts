@@ -99,7 +99,23 @@ export interface PayloadDto extends DataTransferObject {
   // authorization token
   readonly authorizationToken: string;
   // payload type
-  readonly type: 'JOIN_CHANNEL' | 'PART_CHANNEL' | 'RELAY_SESSION_DESCRIPTION' | 'RELAY_ICE_CANDIDATE' | 'JOIN_USER' | 'PART_USER' | 'NEW_MESSAGE';
+  readonly type:
+    | 'JOIN_CHANNEL'
+    | 'PART_CHANNEL'
+    | 'RELAY_SESSION_DESCRIPTION'
+    | 'RELAY_ICE_CANDIDATE'
+    | 'JOIN_USER'
+    | 'PART_USER'
+    | 'USER_UPDATED'
+    | 'NEW_MESSAGE'
+    | 'CHANNEL_JOINED'
+    | 'CHANNEL_PARTED'
+    | 'REACTION'
+    | 'KICK'
+    | 'KICKED'
+    | 'REQUEST_PRESENT'
+    | 'SET_PRESENTER'
+    | 'PRESENTER_CHANGED';
 }
 
 // dto for websocket relay session description
