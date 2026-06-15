@@ -57,6 +57,12 @@ const messages = {
       passwordPrompt: '이 방의 비밀번호를 입력해 주세요.',
       goCreate: '새 공유 만들기',
     },
+    nickname: {
+      placeholder: '닉네임 입력',
+      save: '저장',
+      saved: '닉네임을 저장했습니다.',
+      host: '호스트',
+    },
     channel: {
       copyLink: '공유 링크 복사',
       linkCopied: '링크가 클립보드에 복사되었습니다.',
@@ -143,6 +149,12 @@ const messages = {
       join: 'Join',
       passwordPrompt: 'Please enter the password for this room.',
       goCreate: 'Create a new sharing',
+    },
+    nickname: {
+      placeholder: 'Enter a nickname',
+      save: 'Save',
+      saved: 'Nickname saved.',
+      host: 'HOST',
     },
     channel: {
       copyLink: 'Copy Share Link',

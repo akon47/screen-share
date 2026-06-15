@@ -702,6 +702,11 @@ export default defineComponent({
           });
       };
 
+      this.signalingWebSocketClient.onuserupdated = () => {
+        // A user changed their nickname — refresh the user list.
+        this.userUpdateKey = {};
+      };
+
       this.signalingWebSocketClient.onnewmessage = (simpleMessage) => {
         this.newSimpleMessage = simpleMessage;
       };
@@ -884,6 +889,7 @@ export default defineComponent({
   width: 100%;
   height: 100%;
 
+  object-fit: contain;
   background: #202020;
 }
 
@@ -1043,6 +1049,55 @@ export default defineComponent({
 
   display: grid;
   grid-template-rows: var(--user-list-height) var(--message-list-height);
+}
+
+/* Mobile / portrait: stack the video on top and the chat panel below. */
+@media (max-width: 768px) {
+  .screen-sharing-channel-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, 42vh) minmax(0, 1fr);
+  }
+
+  .video-container {
+    --video-footer-height: 92px;
+  }
+
+  .video-footer {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .video-container button {
+    font-size: 0.8em;
+    padding: 6px 8px;
+    min-width: 0;
+  }
+
+  .quality-select {
+    font-size: 0.8em;
+    padding: 5px;
+  }
+
+  .user-container {
+    box-shadow: 0 -2px 5px var(--base-shadow-color);
+    grid-template-rows: 120px minmax(0, 1fr);
+  }
+
+  .status-overlay {
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .overlay-title { font-size: 1.05em; }
+  .overlay-detail, .overlay-hint { font-size: 0.85em; }
+
+  .overlay-actions {
+    flex-direction: column;
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .overlay-actions button { width: 100%; }
 }
 
 </style>

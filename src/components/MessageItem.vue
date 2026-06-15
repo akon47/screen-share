@@ -26,7 +26,8 @@ export default defineComponent({
   },
   computed: {
     identifier() {
-      return this.simpleMessage?.authorId.split('-').pop();
+      // Prefer the author's nickname, fall back to the short id segment.
+      return this.simpleMessage?.authorNickname || this.simpleMessage?.authorId.split('-').pop();
     },
     createdAt() {
       return dayjs(this.simpleMessage?.createdAt).format('YYYY.MM.DD H:mm');

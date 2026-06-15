@@ -76,6 +76,8 @@ export interface SimpleMessageDto extends DataTransferObject {
   readonly message: string;
   // author id
   readonly authorId: string;
+  // author nickname
+  readonly authorNickname?: string | null;
   // created at
   readonly createdAt: Date;
   // last modified at
@@ -88,6 +90,8 @@ export interface ChannelUserDto extends DataTransferObject {
   readonly id: string;
   // role type
   readonly roleType: 'ROLE_GUEST' | 'ROLE_HOST';
+  // user nickname
+  readonly nickname?: string | null;
 }
 
 // dto for websocket
