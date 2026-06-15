@@ -11,8 +11,8 @@
     </div>
     <div class="user-list-container">
       <user-item v-for="user in users" :key="user.id" :user="user" :my-id="myUserId"
-                 :is-host="isHost" :presenter-id="presenterId"
-                 @kick="$emit('kick', $event)" @set-presenter="$emit('set-presenter', $event)"/>
+                 :is-host="isHost"
+                 @kick="$emit('kick', $event)"/>
     </div>
   </div>
 </template>
@@ -42,7 +42,7 @@ function decodeUserId(token: string): string {
 export default defineComponent({
   name: 'UserForm',
   components: { UserItem },
-  emits: ['kick', 'set-presenter'],
+  emits: ['kick'],
   props: {
     token: {
       type: String,
@@ -56,10 +56,6 @@ export default defineComponent({
     isHost: {
       type: Boolean,
       default: false,
-    },
-    presenterId: {
-      type: String,
-      default: '',
     },
   },
   computed: {

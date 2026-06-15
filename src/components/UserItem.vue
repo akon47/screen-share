@@ -1,14 +1,12 @@
 <template>
   <div class="user-item-container">
     <span v-if="isHostUser" class="role-badge">{{ $t('nickname.host') }}</span>
-    <span v-if="isPresenter" class="presenter-badge" :title="$t('nickname.presenter')">🎥</span>
     <div class="identifier">
       {{ identifier }}
     </div>
     <span v-if="isMe" class="me-tag">({{ $t('nickname.me') }})</span>
     <div class="user-actions" v-if="showActions">
-      <button v-if="canSetPresenter" class="action-btn" :title="$t('nickname.makePresenter')" @click="$emit('set-presenter', user.id)">🎥</button>
-      <button v-if="canKick" class="action-btn kick" :title="$t('nickname.kick')" @click="$emit('kick', user.id)">⛔</button>
+      <button class="action-btn kick" :title="$t('nickname.kick')" @click="$emit('kick', user.id)">⛔</button>
     </div>
   </div>
 </template>
@@ -19,7 +17,7 @@ import { ChannelUserDto } from '@/api/models/sharing.dtos';
 
 export default defineComponent({
   name: 'UserItem',
-  emits: ['kick', 'set-presenter'],
+  emits: ['kick'],
   props: {
     user: Object as PropType<ChannelUserDto>,
     myId: {
@@ -30,10 +28,6 @@ export default defineComponent({
       type: Boolean,
       default: false,
     },
-    presenterId: {
-      type: String,
-      default: '',
-    },
   },
   computed: {
     isHostUser(): boolean {
@@ -42,23 +36,13 @@ export default defineComponent({
     isMe(): boolean {
       return !!this.myId && this.user?.id === this.myId;
     },
-    isPresenter(): boolean {
-      return !!this.presenterId && this.user?.id === this.presenterId;
-    },
     identifier() {
       // Prefer the nickname, fall back to the short id segment.
       return this.user?.nickname || this.user?.id.split('-').pop();
     },
-    // Host-only moderation actions, never shown for the host's own row.
+    // Host-only kick action, never shown for the host's own row or other hosts.
     showActions(): boolean {
-      return this.isHost && !this.isMe;
-    },
-    canKick(): boolean {
-      // The host cannot kick themselves; other users (incl. a guest presenter) can be kicked.
-      return !this.isHostUser;
-    },
-    canSetPresenter(): boolean {
-      return !this.isPresenter;
+      return this.isHost && !this.isMe && !this.isHostUser;
     },
   },
 });
@@ -88,11 +72,6 @@ export default defineComponent({
   border-radius: 4px;
   background: var(--link-accent-color);
   color: #fff;
-  flex-shrink: 0;
-}
-
-.presenter-badge {
-  font-size: 0.85em;
   flex-shrink: 0;
 }
 
