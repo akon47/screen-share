@@ -44,6 +44,11 @@ export default class SignalingWebSocketClient {
             this.onuserparted(payload.user);
           }
           break;
+        case 'USER_UPDATED':
+          if (this.onuserupdated) {
+            this.onuserupdated(payload.user);
+          }
+          break;
         case 'RELAY_SESSION_DESCRIPTION':
           if (this.onrelaysessiondescription) {
             this.onrelaysessiondescription(payload.userId, payload.sessionDescription);
@@ -99,6 +104,7 @@ export default class SignalingWebSocketClient {
 
   public onuserjoined: { (user: ChannelUserDto): void } | undefined;
   public onuserparted: { (user: ChannelUserDto): void } | undefined;
+  public onuserupdated: { (user: ChannelUserDto): void } | undefined;
   public onrelaysessiondescription: { (userId: string, sessionDescription: RTCSessionDescriptionInit): void } | undefined;
   public onrelayicecandidate: { (userId: string, iceCandidate: RTCIceCandidateInit): void } | undefined;
   public onnewmessage: { (message: SimpleMessageDto): void } | undefined;

@@ -54,6 +54,15 @@ function getChannelUsers(authorizationToken: string, channelId: string) {
   });
 }
 
+// Update current user's nickname
+function updateNickname(authorizationToken: string, channelId: string, nickname: string) {
+  return sharingV1.putRequest<ChannelUserDto>(`/channels/${channelId}/users/nickname`, null, {
+    nickname: nickname,
+  }, {
+    Authorization: authorizationToken,
+  });
+}
+
 export {
   createSharingChannel,
   getPublicChannels,
@@ -62,4 +71,5 @@ export {
   createMessage,
   getChannelMessages,
   getChannelUsers,
+  updateNickname,
 };
