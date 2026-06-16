@@ -61,13 +61,28 @@
           <button @click="retryConnection">{{ $t('common.retry') }}</button>
           <button class="secondary" @click="partChannel">{{ $t('common.leave') }}</button>
         </div>
+        <div v-else-if="overlay.showLeave" class="overlay-actions">
+          <button class="secondary" @click="partChannel">{{ $t('common.leave') }}</button>
+        </div>
       </div>
 
-      <div v-show="showVideo" class="video-controls" :class="{ visible: controlsVisible }"
+      <!-- Host: prompt to pick a screen when not currently sharing -->
+      <div v-if="hostNotSharing" class="share-prompt">
+        <div class="share-prompt-icon">🖥️</div>
+        <button class="share-start-btn" :disabled="isStartingShare" @click="startSharing">
+          {{ $t('channel.startShare') }}
+        </button>
+        <div class="share-prompt-hint">{{ $t('channel.startShareHint') }}</div>
+      </div>
+
+      <div v-show="barVisible" class="video-controls" :class="{ visible: controlsVisible || hostNotSharing }"
            @mouseenter="keepControls" @mouseleave="revealControls">
         <div class="footer-left">
           <button @click="copyShareLink">{{ $t('channel.copyLink') }}</button>
           <button @click="openQr">🔳 {{ $t('channel.qr') }}</button>
+          <button v-if="isHost && isSharing" @click="startSharing">🔄 {{ $t('channel.changeShare') }}</button>
+          <button v-if="isHost && isSharing" @click="stopSharing">⏹ {{ $t('channel.stopShare') }}</button>
+          <template v-if="showVideo">
           <button @click="toggleMute">{{ muteLabel }}</button>
           <button v-if="isFullscreenSupported" @click="toggleFullscreen">⛶ {{ $t('channel.fullscreen') }}</button>
           <button v-if="isHost" :class="{ 'draw-toggle-active': drawingActive }" @click="toggleDrawing">✏️ {{ $t('channel.draw') }}</button>
@@ -80,6 +95,7 @@
           <div class="reaction-bar">
             <button v-for="e in reactionEmojis" :key="e" class="reaction-btn" @click="sendReaction(e)">{{ e }}</button>
           </div>
+          </template>
         </div>
         <div class="footer-buttons">
           <button @click="partChannel">{{ $t('channel.exit') }}</button>
@@ -200,9 +216,17 @@ export default defineComponent({
     // Whether the <video> element should be visible.
     showVideo(): boolean {
       if (this.isHost) {
-        return !this.isLoading;
+        return this.isSharing;
       }
-      return this.phase === 'connected';
+      return this.phase === 'connected' && this.hostSharing;
+    },
+    // Host has joined the room but has not picked a screen to share yet.
+    hostNotSharing(): boolean {
+      return this.isHost && this.isJoined && !this.isSharing;
+    },
+    // Whether the bottom controls bar should be mounted at all.
+    barVisible(): boolean {
+      return this.showVideo || this.hostNotSharing;
     },
     connectedViewerCount(): number {
       return Object.values(this.peerStates).filter((s) => s === 'connected').length;
@@ -226,24 +250,23 @@ export default defineComponent({
       return this.audioMuted ? `🔇 ${this.$t('channel.guestUnmute')}` : `🔊 ${this.$t('channel.guestMute')}`;
     },
     // Drives the status / error overlay shown over the video area.
-    overlay(): { show: boolean; kind: string; title: string; detail: string; hint: string; showRetry: boolean } {
+    overlay(): { show: boolean; kind: string; title: string; detail: string; hint: string; showRetry: boolean; showLeave: boolean } {
       const t = (key: string) => String(this.$t(key));
-      // Host: only block the view while the local screen is being captured.
+      const none = { show: false, kind: '', title: '', detail: '', hint: '', showRetry: false, showLeave: false };
+      // Host: the not-sharing state is handled by the dedicated share prompt.
       if (this.isHost) {
-        if (this.isLoading) {
-          return { show: true, kind: 'loading', title: t('channel.preparing'), detail: '', hint: '', showRetry: false };
-        }
-        return { show: false, kind: '', title: '', detail: '', hint: '', showRetry: false };
+        return none;
       }
 
       // Guest perspective.
       switch (this.phase) {
         case 'connecting':
-          return { show: true, kind: 'loading', title: t('channel.connecting'), detail: '', hint: '', showRetry: false };
+          return { ...none, show: true, kind: 'loading', title: t('channel.connecting') };
         case 'reconnecting':
-          return { show: true, kind: 'reconnecting', title: t('channel.reconnecting'), detail: '', hint: '', showRetry: false };
+          return { ...none, show: true, kind: 'reconnecting', title: t('channel.reconnecting') };
         case 'failed':
           return {
+            ...none,
             show: true,
             kind: 'failed',
             title: t('channel.failedTitle'),
@@ -253,15 +276,20 @@ export default defineComponent({
           };
         case 'ended':
           return {
+            ...none,
             show: true,
             kind: 'failed',
             title: t('channel.endedTitle'),
             detail: t('channel.endedDetail'),
-            hint: '',
-            showRetry: false,
           };
+        case 'connected':
+          // Connected, but the host has not started (or has paused) sharing.
+          if (!this.hostSharing) {
+            return { ...none, show: true, kind: 'reconnecting', title: t('channel.waitingHost'), showLeave: true };
+          }
+          return none;
         default:
-          return { show: false, kind: '', title: '', detail: '', hint: '', showRetry: false };
+          return none;
       }
     },
   },
@@ -291,6 +319,15 @@ export default defineComponent({
       userUpdateKey: {},
       isLoading: false,
       isJoined: false,
+      // Host: whether a screen is currently being captured and shared.
+      isSharing: false,
+      // Host: a screen pick / capture is in progress (disables the share button).
+      isStartingShare: false,
+      // Guest: whether the host is currently sending live media (vs paused/not started).
+      hostSharing: false,
+      // Host: per-viewer media senders (video/audio) used to attach or swap the
+      // captured stream via replaceTrack without renegotiating.
+      peerSenders: new Map<string, { video: RTCRtpSender; audio: RTCRtpSender }>(),
       // Connection phase (guest view / overall).
       phase: 'idle' as ConnectionPhase,
       // Per-peer RTCPeerConnection.connectionState, keyed by userId (reactive).
@@ -416,7 +453,10 @@ export default defineComponent({
 
       return peerConnection;
     },
-    // A peer connection over which the host sends media to a viewer.
+    // A peer connection over which the host sends media to a viewer. The video
+    // and audio transceivers are created up-front (sendonly) so that the host
+    // can start, change, or stop sharing later with replaceTrack and no
+    // renegotiation — even for viewers who joined before any screen was picked.
     createSenderPeer(userId: string): RTCPeerConnection {
       const peer = this.createPeerConnection(userId);
       this.rtcPeerConnections.set(userId, peer);
@@ -426,9 +466,11 @@ export default defineComponent({
           this.signalingWebSocketClient.relayIceCandidate(userId, ev.candidate);
         }
       };
-      if (this.stream instanceof MediaStream) {
-        this.stream.getTracks().forEach((track) => peer.addTrack(track, this.stream));
-      }
+      const videoTransceiver = peer.addTransceiver('video', { direction: 'sendonly' });
+      const audioTransceiver = peer.addTransceiver('audio', { direction: 'sendonly' });
+      this.peerSenders.set(userId, { video: videoTransceiver.sender, audio: audioTransceiver.sender });
+      // If a screen is already being shared, attach it to the fresh senders.
+      this.syncSendersToStream(userId);
       return peer;
     },
     // A peer connection over which a viewer receives the host's media.
@@ -441,8 +483,23 @@ export default defineComponent({
         }
       };
       peer.ontrack = (ev) => {
-        this.stream = ev.streams[0];
+        // The host signals tracks via transceivers (no stream id), so assemble a
+        // local MediaStream from the received tracks rather than ev.streams[0].
+        if (!(this.stream instanceof MediaStream)) {
+          this.stream = new MediaStream();
+        }
+        if (!this.stream.getTracks().includes(ev.track)) {
+          this.stream.addTrack(ev.track);
+        }
         this.videoElement.srcObject = this.stream;
+        if (ev.track.kind === 'video') {
+          // A muted track means the host is connected but not currently sending
+          // frames (not started / paused). Track mute/unmute drives the overlay.
+          this.hostSharing = !ev.track.muted;
+          ev.track.onunmute = () => { this.hostSharing = true; };
+          ev.track.onmute = () => { this.hostSharing = false; };
+          ev.track.onended = () => { this.hostSharing = false; };
+        }
       };
       this.startConnectTimeout();
       return peer;
@@ -1187,6 +1244,7 @@ export default defineComponent({
           if (this.isHost) {
             peer.close();
             this.rtcPeerConnections.delete(user.id);
+            this.peerSenders.delete(user.id);
             delete this.peerStates[user.id];
             this.iceRestartCounts.delete(user.id);
             this.clearDisconnectTimer(user.id);
@@ -1267,19 +1325,32 @@ export default defineComponent({
         return;
       }
 
-      // Compatibility: getDisplayMedia is unavailable on iOS Safari and older
-      // browsers. Fail loudly with a clear, bilingual reason.
-      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
-        this.isLoading = false;
-        alert(String(this.$t('channel.hostUnsupported')));
-        this.$router.push('/');
+      // The room is created immediately without picking a screen; the host
+      // joins signaling now and starts sharing later via the share prompt.
+      await this.initializeWebSocket(authorizationToken);
+      this.startAdaptiveBitrate();
+      this.isLoading = false;
+    },
+    // Host: open the browser's screen picker and start (or switch) sharing.
+    // Used by both the centre "share" prompt and the "change screen" control —
+    // the current share keeps running until a new source is successfully picked.
+    async startSharing() {
+      if (!this.isHost || this.isStartingShare) {
         return;
       }
 
+      // Compatibility: getDisplayMedia is unavailable on iOS Safari and older
+      // browsers. The room still exists; only screen capture is unsupported.
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+        alert(String(this.$t('channel.hostUnsupported')));
+        return;
+      }
+
+      this.isStartingShare = true;
+      let stream: MediaStream;
       try {
-        this.stream = await this.captureDisplay();
+        stream = await this.captureDisplay();
       } catch (error: any) {
-        this.isLoading = false;
         const name = error?.name;
         if (name === 'NotAllowedError' || name === 'AbortError') {
           this.$toast.info(String(this.$t('channel.shareCancelled')));
@@ -1288,23 +1359,71 @@ export default defineComponent({
         } else {
           this.$toast.error(String(this.$t('channel.captureFailed')));
         }
-        this.$router.push('/');
         return;
+      } finally {
+        this.isStartingShare = false;
       }
 
-      // When the host stops sharing via the browser's native UI, leave cleanly.
-      const videoTrack = this.stream.getVideoTracks()[0];
+      // Swap in the new stream (stopping any previous capture) and push it to
+      // every connected viewer via replaceTrack — no renegotiation needed.
+      this.stopLocalTracks();
+      // Annotations belong to the previous screen — clear them on a new source.
+      if (this.isSharing) {
+        this.clearDrawing();
+      }
+      this.stream = stream;
+      this.audioEnabled = true;
+      this.isSharing = true;
+      this.videoElement.srcObject = stream;
+
+      // Stopping via the browser's native "Stop sharing" returns to the
+      // not-sharing state instead of leaving the room.
+      const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.onended = () => {
-          this.$toast.info(String(this.$t('channel.hostStopped')));
-          this.$router.push('/');
+          this.stopSharing();
         };
       }
 
-      this.videoElement.srcObject = this.stream;
-
-      await this.initializeWebSocket(authorizationToken);
-      this.startAdaptiveBitrate();
+      this.rtcPeerConnections.forEach((_, userId) => this.syncSendersToStream(userId));
+      this.$nextTick(() => this.resizeDrawCanvas());
+    },
+    // Host: stop sharing but stay in the room, returning to the share prompt.
+    stopSharing() {
+      if (!this.isHost || !this.isSharing) {
+        return;
+      }
+      this.isSharing = false;
+      // Detach the (now stopped) media from every viewer's senders.
+      this.rtcPeerConnections.forEach((_, userId) => this.syncSendersToStream(userId));
+      this.stopLocalTracks();
+      this.stream = {} as MediaStream;
+      this.videoElement.srcObject = null;
+      this.drawingActive = false;
+      this.clearDrawing();
+      this.$toast.info(String(this.$t('channel.sharePaused')));
+    },
+    // Stop and release the tracks of the current local capture, if any.
+    stopLocalTracks() {
+      if (this.stream instanceof MediaStream) {
+        this.stream.getTracks().forEach((track) => {
+          track.onended = null;
+          track.stop();
+        });
+      }
+    },
+    // Host: attach the current capture (or detach when not sharing) to a single
+    // viewer's video/audio senders via replaceTrack.
+    syncSendersToStream(userId: string) {
+      const senders = this.peerSenders.get(userId);
+      if (!senders) {
+        return;
+      }
+      const sharing = this.isSharing && this.stream instanceof MediaStream;
+      const videoTrack = sharing ? this.stream.getVideoTracks()[0] ?? null : null;
+      const audioTrack = sharing ? this.stream.getAudioTracks()[0] ?? null : null;
+      senders.video.replaceTrack(videoTrack).catch((error) => console.error('replaceTrack(video) failed', error));
+      senders.audio.replaceTrack(audioTrack).catch((error) => console.error('replaceTrack(audio) failed', error));
     },
     async captureDisplay(): Promise<MediaStream> {
       try {
@@ -1361,7 +1480,18 @@ export default defineComponent({
         });
     },
     async partChannel() {
+      // The host leaving tears down the room for everyone — confirm first.
+      if (this.isHost && !window.confirm(String(this.$t('channel.hostLeaveConfirm')))) {
+        return;
+      }
       this.$router.push('/');
+    },
+    // Native browser confirmation when the host closes/reloads the tab.
+    handleBeforeUnload(event: BeforeUnloadEvent) {
+      if (this.isHost) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
     },
     copyShareLink() {
       navigator.clipboard.writeText(this.shareLink);
@@ -1393,12 +1523,15 @@ export default defineComponent({
     this.setupDrawCanvas();
 
     if (this.hostToken) {
+      // Warn before the host closes/reloads the tab (which ends the room).
+      window.addEventListener('beforeunload', this.handleBeforeUnload);
       await this.initializeHostMode(this.hostToken);
     } else if (this.guestToken) {
       await this.initializeGuestMode(this.guestToken);
     }
   },
   unmounted() {
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
     if (this.controlsHideTimer) {
       window.clearTimeout(this.controlsHideTimer);
     }
@@ -1855,6 +1988,57 @@ export default defineComponent({
   background: transparent;
   color: #f0f0f0;
   border: 1px solid #777;
+}
+
+/* Host prompt to pick a screen when not currently sharing */
+.share-prompt {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 16px;
+  padding: 24px;
+
+  background: #202020;
+  color: #f0f0f0;
+}
+
+.share-prompt-icon {
+  font-size: 3.4em;
+  opacity: 0.9;
+}
+
+.share-start-btn {
+  font-size: 1.1em;
+  font-weight: bold;
+  padding: 14px 28px;
+  min-width: 220px;
+  color: #fff;
+  background: var(--link-accent-color);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.share-start-btn:hover:not([disabled]) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.share-start-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.share-prompt-hint {
+  font-size: 0.95em;
+  color: #c8c8c8;
 }
 
 .user-container {

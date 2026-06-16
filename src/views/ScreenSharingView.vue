@@ -40,8 +40,13 @@ export default defineComponent({
 
 .form-wrapper button.secondary {
   background: transparent;
-  border: 1px solid var(--menu-hover-color);
+  border: 1px solid var(--border-color);
   color: var(--base-color);
+}
+
+.form-wrapper button.secondary:hover:not([disabled]) {
+  background-color: var(--menu-hover-color);
+  cursor: pointer;
 }
 
 
