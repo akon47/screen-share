@@ -1,5 +1,6 @@
 import {
   ChannelUserDto,
+  DrawPayloadDto,
   PayloadDto,
   RelayIceCandidateDto,
   RelaySessionDescriptionDto,
@@ -79,6 +80,16 @@ export default class SignalingWebSocketClient {
             this.onkicked();
           }
           break;
+        case 'DRAW':
+          if (this.ondraw) {
+            this.ondraw(payload);
+          }
+          break;
+        case 'CLEAR_DRAW':
+          if (this.oncleardraw) {
+            this.oncleardraw();
+          }
+          break;
       }
     };
   }
@@ -116,6 +127,27 @@ export default class SignalingWebSocketClient {
     }));
   }
 
+  public sendDraw(stroke: { strokeId: string; mode: string; color: string; width: number; points: number[]; targetUserId?: string }) {
+    this.socket.send(JSON.stringify({
+      authorizationToken: this.authorizationToken,
+      type: 'DRAW',
+      strokeId: stroke.strokeId,
+      mode: stroke.mode,
+      color: stroke.color,
+      width: stroke.width,
+      points: stroke.points,
+      // When set, the server delivers only to this user (replay to a new joiner).
+      targetUserId: stroke.targetUserId,
+    }));
+  }
+
+  public sendClearDraw() {
+    this.socket.send(JSON.stringify({
+      authorizationToken: this.authorizationToken,
+      type: 'CLEAR_DRAW',
+    }));
+  }
+
   public kickUser(targetUserId: string) {
     this.socket.send(JSON.stringify({
       authorizationToken: this.authorizationToken,
@@ -136,6 +168,8 @@ export default class SignalingWebSocketClient {
   public onnewmessage: { (message: SimpleMessageDto): void } | undefined;
   public onreaction: { (emoji: string, userId: string): void } | undefined;
   public onkicked: { (): void } | undefined;
+  public ondraw: { (payload: DrawPayloadDto): void } | undefined;
+  public oncleardraw: { (): void } | undefined;
 
   public onchanneljoined: { (user: ChannelUserDto): void } | undefined;
 
