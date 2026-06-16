@@ -112,7 +112,27 @@ export interface PayloadDto extends DataTransferObject {
     | 'CHANNEL_PARTED'
     | 'REACTION'
     | 'KICK'
-    | 'KICKED';
+    | 'KICKED'
+    | 'DRAW'
+    | 'CLEAR_DRAW';
+}
+
+// dto for websocket host drawing annotation
+export interface DrawPayloadDto extends DataTransferObject, PayloadDto {
+  // stroke id (groups the points of a single pen stroke)
+  readonly strokeId: string;
+  // draw mode: 'pen' or 'eraser'
+  readonly mode: 'pen' | 'eraser';
+  // stroke color (CSS color)
+  readonly color: string;
+  // stroke width, normalized to the video content height
+  readonly width: number;
+  // flattened normalized points [x0, y0, x1, y1, ...] in the range 0..1
+  readonly points: number[];
+  // id of the user (host) who drew
+  readonly userId?: string;
+  // when set, deliver only to this user (replay of existing strokes to a new joiner)
+  readonly targetUserId?: string;
 }
 
 // dto for websocket relay session description

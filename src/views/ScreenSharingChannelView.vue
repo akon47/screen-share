@@ -5,6 +5,30 @@
       <!-- Remote/local video -->
       <video v-show="showVideo" ref="video" playsinline autoplay muted @click="toggleControls"/>
 
+      <!-- Host drawing annotation layer (broadcast to all viewers) -->
+      <canvas v-show="showVideo" ref="drawCanvas" class="draw-layer" :class="{ active: drawingActive }"
+              @pointerdown="onDrawPointerDown" @pointermove="onDrawPointerMove"
+              @pointerup="onDrawPointerUp" @pointercancel="onDrawPointerUp" @pointerleave="onDrawPointerUp"/>
+
+      <!-- Host drawing toolbar -->
+      <div v-if="isHost && drawingActive" class="draw-toolbar" @pointerdown.stop @mousedown.stop>
+        <button class="draw-tool" :class="{ sel: drawTool === 'pen' }" :title="$t('channel.drawPen')"
+                @click="selectTool('pen')">✏️</button>
+        <button class="draw-tool" :class="{ sel: drawTool === 'eraser' }" :title="$t('channel.drawEraser')"
+                @click="selectTool('eraser')">🧽</button>
+        <span class="draw-sep"/>
+        <button v-for="c in drawColors" :key="c" class="draw-swatch" :class="{ sel: drawColor === c && drawTool === 'pen' }"
+                :style="{ background: c }" :title="$t('channel.drawColor')" @click="selectColor(c)"/>
+        <input type="color" class="draw-color-input" :value="drawColor" :title="$t('channel.drawColor')"
+               @input="selectColor(($event.target as HTMLInputElement).value)"/>
+        <span class="draw-sep"/>
+        <input type="range" min="1" max="28" step="1" v-model.number="drawWidthPx" class="draw-width" :title="$t('channel.drawWidth')"/>
+        <span class="draw-width-preview" :style="{ width: drawWidthPx + 'px', height: drawWidthPx + 'px', background: drawTool === 'eraser' ? '#fff' : drawColor }"/>
+        <span class="draw-sep"/>
+        <button class="draw-clear" :title="$t('channel.drawClear')" @click="clearDrawing">🗑</button>
+        <button class="draw-close" :title="$t('channel.drawClose')" @click="toggleDrawing">✕</button>
+      </div>
+
       <!-- Floating emoji reactions -->
       <div class="reaction-layer">
         <span v-for="r in reactions" :key="r.id" class="reaction-emoji" :style="{ left: r.left + '%' }">{{ r.emoji }}</span>
@@ -46,6 +70,7 @@
           <button @click="openQr">🔳 {{ $t('channel.qr') }}</button>
           <button @click="toggleMute">{{ muteLabel }}</button>
           <button v-if="isFullscreenSupported" @click="toggleFullscreen">⛶ {{ $t('channel.fullscreen') }}</button>
+          <button v-if="isHost" :class="{ 'draw-toggle-active': drawingActive }" @click="toggleDrawing">✏️ {{ $t('channel.draw') }}</button>
           <select v-if="isHost" v-model="selectedQuality" @change="applyQuality" class="quality-select" :title="$t('channel.qualityLabel')">
             <option value="auto">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityAuto') }}</option>
             <option value="high">{{ $t('channel.qualityLabel') }}: {{ $t('channel.qualityHigh') }}</option>
@@ -80,13 +105,13 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue';
+import { defineComponent, markRaw } from 'vue';
 import { joinSharingChannel, getTurnCredentials } from '@/api/sharing';
 import SignalingWebSocketClient from '@/utils/websocket';
 import { HttpApiError } from '@/api/common/httpApiClient';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 import MessageForm from '@/components/MessageForm.vue';
-import { ChannelUserDto, SimpleMessageDto } from '@/api/models/sharing.dtos';
+import { ChannelUserDto, DrawPayloadDto, SimpleMessageDto } from '@/api/models/sharing.dtos';
 import UserForm from '@/components/UserForm.vue';
 import QRCode from 'qrcode';
 
@@ -127,6 +152,20 @@ const QUALITY_PRESETS: { [preset: string]: any } = {
 
 // Available emoji reactions.
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '👏', '🎉'];
+
+// Preset pen colors for the drawing toolbar.
+const DRAW_COLORS = ['#ff3b30', '#ffcc00', '#34c759', '#0a84ff', '#af52de', '#ffffff', '#000000'];
+
+// A single pen/eraser stroke, stored in normalized (0..1) coordinates relative
+// to the displayed video content rectangle so it renders identically on every
+// screen size. `width` is normalized to the content height.
+interface DrawStroke {
+  id: string;
+  mode: 'pen' | 'eraser';
+  color: string;
+  width: number;
+  points: { x: number; y: number }[];
+}
 
 export default defineComponent({
   name: 'ScreenSharingChannelView',
@@ -283,6 +322,24 @@ export default defineComponent({
       reactionEmojis: REACTION_EMOJIS,
       reactions: [] as { id: number; emoji: string; left: number }[],
       reactionSeq: 0,
+      // ---- Drawing annotation (host draws, broadcast to all viewers) -------
+      // Reactive UI state.
+      drawingActive: false,
+      drawTool: 'pen' as 'pen' | 'eraser',
+      drawColor: DRAW_COLORS[0],
+      drawWidthPx: 4,
+      drawColors: DRAW_COLORS,
+      hasDrawing: false,
+      // Non-reactive rendering state (assigned with markRaw in mounted).
+      drawCanvas: null as null | HTMLCanvasElement,
+      drawCtx: null as null | CanvasRenderingContext2D,
+      strokes: [] as DrawStroke[],
+      strokeMap: {} as Record<string, DrawStroke>,
+      currentStroke: null as null | DrawStroke,
+      pendingPoints: [] as { x: number; y: number }[],
+      drawFlushScheduled: false,
+      drawSeq: 0,
+      drawResizeObserver: null as null | ResizeObserver,
       // QR code modal.
       showQr: false,
       qrDataUrl: '',
@@ -756,6 +813,303 @@ export default defineComponent({
         this.reactions = this.reactions.filter((r) => r.id !== id);
       }, REACTION_LIFETIME_MS);
     },
+    // ---- Drawing annotation -----------------------------------------------
+    // Grab the canvas + 2D context and size it to the video box.
+    setupDrawCanvas() {
+      const canvas = this.$refs.drawCanvas as HTMLCanvasElement | undefined;
+      if (!canvas) {
+        return;
+      }
+      this.drawCanvas = markRaw(canvas);
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        this.drawCtx = markRaw(ctx);
+      }
+      this.resizeDrawCanvas();
+      // Redraw on layout changes (resize, orientation, panel toggles).
+      if (!this.drawResizeObserver && typeof ResizeObserver !== 'undefined') {
+        this.drawResizeObserver = new ResizeObserver(() => this.resizeDrawCanvas());
+        this.drawResizeObserver.observe(canvas);
+      }
+    },
+    // Match the backing store to the CSS size (accounting for device pixels).
+    resizeDrawCanvas() {
+      const canvas = this.drawCanvas;
+      const ctx = this.drawCtx;
+      if (!canvas || !ctx) {
+        return;
+      }
+      const cssWidth = canvas.clientWidth;
+      const cssHeight = canvas.clientHeight;
+      if (cssWidth === 0 || cssHeight === 0) {
+        return;
+      }
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(cssWidth * dpr));
+      canvas.height = Math.max(1, Math.round(cssHeight * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.redrawAll();
+    },
+    // The rectangle (in CSS px) where the video content is actually drawn,
+    // given object-fit: contain. Drawing is normalized against this so the same
+    // logical point maps to the same place on every screen.
+    drawContentRect(): { x: number; y: number; w: number; h: number } {
+      const canvas = this.drawCanvas;
+      const cw = canvas?.clientWidth ?? 0;
+      const ch = canvas?.clientHeight ?? 0;
+      const vw = this.videoElement?.videoWidth ?? 0;
+      const vh = this.videoElement?.videoHeight ?? 0;
+      if (!vw || !vh || !cw || !ch) {
+        return { x: 0, y: 0, w: cw, h: ch };
+      }
+      const scale = Math.min(cw / vw, ch / vh);
+      const w = vw * scale;
+      const h = vh * scale;
+      return { x: (cw - w) / 2, y: (ch - h) / 2, w, h };
+    },
+    drawNormalize(px: number, py: number, rect: { x: number; y: number; w: number; h: number }) {
+      const nx = rect.w > 0 ? (px - rect.x) / rect.w : 0;
+      const ny = rect.h > 0 ? (py - rect.y) / rect.h : 0;
+      return { x: Math.min(1, Math.max(0, nx)), y: Math.min(1, Math.max(0, ny)) };
+    },
+    drawDenormalize(pt: { x: number; y: number }, rect: { x: number; y: number; w: number; h: number }) {
+      return { x: rect.x + pt.x * rect.w, y: rect.y + pt.y * rect.h };
+    },
+    // Draw a stroke's points starting at `startIndex` (connecting from the
+    // previous point). A single-point stroke is rendered as a dot.
+    drawStrokeFrom(stroke: DrawStroke, startIndex: number) {
+      const ctx = this.drawCtx;
+      if (!ctx) {
+        return;
+      }
+      const rect = this.drawContentRect();
+      const lineWidth = Math.max(1, stroke.width * rect.h);
+      ctx.save();
+      ctx.globalCompositeOperation = stroke.mode === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.strokeStyle = stroke.color;
+      ctx.fillStyle = stroke.color;
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      const pts = stroke.points;
+      if (pts.length === 1) {
+        const p = this.drawDenormalize(pts[0], rect);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, lineWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const start = Math.max(1, startIndex);
+        const prev = this.drawDenormalize(pts[start - 1], rect);
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        for (let i = start; i < pts.length; i++) {
+          const p = this.drawDenormalize(pts[i], rect);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+    // Clear and re-render every stroke (used on resize / first paint).
+    redrawAll() {
+      const ctx = this.drawCtx;
+      const canvas = this.drawCanvas;
+      if (!ctx || !canvas) {
+        return;
+      }
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      for (const stroke of this.strokes) {
+        this.drawStrokeFrom(stroke, 1);
+      }
+    },
+    genStrokeId(): string {
+      return `${Date.now().toString(36)}-${(this.drawSeq++).toString(36)}`;
+    },
+    // Host: toggle the drawing toolbar / canvas capture.
+    toggleDrawing() {
+      this.drawingActive = !this.drawingActive;
+      if (this.drawingActive) {
+        this.keepControls();
+        this.$nextTick(() => this.resizeDrawCanvas());
+      } else {
+        this.currentStroke = null;
+        this.pendingPoints = [];
+      }
+    },
+    selectTool(tool: 'pen' | 'eraser') {
+      this.drawTool = tool;
+    },
+    selectColor(color: string) {
+      this.drawColor = color;
+      this.drawTool = 'pen';
+    },
+    onDrawPointerDown(ev: PointerEvent) {
+      if (!this.isHost || !this.drawingActive || !this.drawCtx) {
+        return;
+      }
+      ev.preventDefault();
+      (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
+      const rect = this.drawContentRect();
+      const point = this.drawNormalize(ev.offsetX, ev.offsetY, rect);
+      const widthNorm = this.drawWidthPx / Math.max(1, rect.h);
+      const stroke: DrawStroke = {
+        id: this.genStrokeId(),
+        mode: this.drawTool,
+        color: this.drawColor,
+        width: widthNorm,
+        points: [point],
+      };
+      this.strokes.push(stroke);
+      this.strokeMap[stroke.id] = stroke;
+      this.currentStroke = stroke;
+      this.hasDrawing = true;
+      this.drawStrokeFrom(stroke, 1);
+      this.pendingPoints = [point];
+      this.scheduleDrawFlush();
+    },
+    onDrawPointerMove(ev: PointerEvent) {
+      if (!this.isHost || !this.drawingActive || !this.currentStroke) {
+        return;
+      }
+      ev.preventDefault();
+      const rect = this.drawContentRect();
+      const point = this.drawNormalize(ev.offsetX, ev.offsetY, rect);
+      const stroke = this.currentStroke;
+      const fromIndex = stroke.points.length;
+      stroke.points.push(point);
+      this.drawStrokeFrom(stroke, fromIndex);
+      this.pendingPoints.push(point);
+      this.scheduleDrawFlush();
+    },
+    onDrawPointerUp(ev: PointerEvent) {
+      if (!this.currentStroke) {
+        return;
+      }
+      (ev.target as HTMLElement).releasePointerCapture?.(ev.pointerId);
+      this.flushDraw();
+      this.currentStroke = null;
+    },
+    // Batch outgoing points to roughly one message per animation frame.
+    scheduleDrawFlush() {
+      if (this.drawFlushScheduled) {
+        return;
+      }
+      this.drawFlushScheduled = true;
+      window.requestAnimationFrame(() => this.flushDraw());
+    },
+    flushDraw() {
+      this.drawFlushScheduled = false;
+      const stroke = this.currentStroke;
+      if (!stroke || this.pendingPoints.length === 0) {
+        return;
+      }
+      const flat: number[] = [];
+      for (const p of this.pendingPoints) {
+        flat.push(Math.round(p.x * 10000) / 10000, Math.round(p.y * 10000) / 10000);
+      }
+      this.pendingPoints = [];
+      if (this.signalingWebSocketClient instanceof SignalingWebSocketClient) {
+        this.signalingWebSocketClient.sendDraw({
+          strokeId: stroke.id,
+          mode: stroke.mode,
+          color: stroke.color,
+          width: stroke.width,
+          points: flat,
+        });
+      }
+    },
+    // Viewer (and host with multiple peers): apply a stroke batch from the host.
+    applyRemoteStroke(payload: DrawPayloadDto) {
+      if (!this.drawCtx) {
+        this.setupDrawCanvas();
+      }
+      if (!this.drawCtx || !Array.isArray(payload.points) || payload.points.length < 2) {
+        return;
+      }
+      const incoming: { x: number; y: number }[] = [];
+      for (let i = 0; i + 1 < payload.points.length; i += 2) {
+        incoming.push({ x: payload.points[i], y: payload.points[i + 1] });
+      }
+      let stroke = this.strokeMap[payload.strokeId];
+      if (!stroke) {
+        stroke = {
+          id: payload.strokeId,
+          mode: payload.mode === 'eraser' ? 'eraser' : 'pen',
+          color: payload.color,
+          width: payload.width,
+          points: [],
+        };
+        this.strokes.push(stroke);
+        this.strokeMap[stroke.id] = stroke;
+      }
+      const prevLen = stroke.points.length;
+      for (const p of incoming) {
+        stroke.points.push(p);
+      }
+      this.hasDrawing = true;
+      if (prevLen === 0 && stroke.points.length === 1) {
+        this.drawStrokeFrom(stroke, 1);
+      } else {
+        this.drawStrokeFrom(stroke, prevLen === 0 ? 1 : prevLen);
+      }
+    },
+    // Host: replay all existing strokes to a single new joiner so they see
+    // everything drawn so far. Sent directly to that user (not broadcast) to
+    // avoid re-drawing on clients that already have the strokes. Only the
+    // already-broadcast ("committed") portion of each stroke is sent — the
+    // unflushed tail of an in-progress stroke is delivered by the normal
+    // broadcast flush, so the joiner gets no duplicated or missing segments.
+    replayDrawingTo(userId: string) {
+      if (!this.isHost || !(this.signalingWebSocketClient instanceof SignalingWebSocketClient)) {
+        return;
+      }
+      // Points per message — kept under the server's per-message limit.
+      const CHUNK = 400;
+      for (const stroke of this.strokes) {
+        let committed = stroke.points.length;
+        if (stroke === this.currentStroke) {
+          committed -= this.pendingPoints.length;
+        }
+        if (committed <= 0) {
+          continue;
+        }
+        for (let start = 0; start < committed; start += CHUNK) {
+          const end = Math.min(committed, start + CHUNK);
+          const flat: number[] = [];
+          for (let i = start; i < end; i++) {
+            const p = stroke.points[i];
+            flat.push(Math.round(p.x * 10000) / 10000, Math.round(p.y * 10000) / 10000);
+          }
+          this.signalingWebSocketClient.sendDraw({
+            strokeId: stroke.id,
+            mode: stroke.mode,
+            color: stroke.color,
+            width: stroke.width,
+            points: flat,
+            targetUserId: userId,
+          });
+        }
+      }
+    },
+    // Host action: clear locally and tell everyone else to clear.
+    clearDrawing() {
+      this.clearDrawingLocal();
+      if (this.signalingWebSocketClient instanceof SignalingWebSocketClient) {
+        this.signalingWebSocketClient.sendClearDraw();
+      }
+    },
+    clearDrawingLocal() {
+      this.strokes = [];
+      this.strokeMap = {};
+      this.currentStroke = null;
+      this.pendingPoints = [];
+      this.hasDrawing = false;
+      const ctx = this.drawCtx;
+      const canvas = this.drawCanvas;
+      if (ctx && canvas) {
+        ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      }
+    },
     // ---- QR code ----------------------------------------------------------
     async openQr() {
       try {
@@ -818,6 +1172,8 @@ export default defineComponent({
         this.$toast.info(String(this.$t('channel.userJoined')));
         if (this.isHost) {
           this.offerToUser(user.id);
+          // Catch the new viewer up on everything drawn so far.
+          this.replayDrawingTo(user.id);
         }
         this.userUpdateKey = {};
       };
@@ -890,6 +1246,14 @@ export default defineComponent({
 
       this.signalingWebSocketClient.onreaction = (emoji) => {
         this.spawnReaction(emoji);
+      };
+
+      this.signalingWebSocketClient.ondraw = (payload) => {
+        this.applyRemoteStroke(payload);
+      };
+
+      this.signalingWebSocketClient.oncleardraw = () => {
+        this.clearDrawingLocal();
       };
 
       this.signalingWebSocketClient.onkicked = () => {
@@ -1020,7 +1384,13 @@ export default defineComponent({
     this.videoElement = this.$refs.video as HTMLVideoElement;
     this.videoElement.onloadeddata = () => {
       this.isLoading = false;
+      // Intrinsic size is known now — size the canvas and repaint annotations.
+      this.$nextTick(() => this.resizeDrawCanvas());
     };
+    // Re-render annotations if the video's intrinsic resolution changes.
+    this.videoElement.addEventListener('resize', () => this.redrawAll());
+
+    this.setupDrawCanvas();
 
     if (this.hostToken) {
       await this.initializeHostMode(this.hostToken);
@@ -1038,6 +1408,10 @@ export default defineComponent({
     if (this.adaptIntervalHandle) {
       window.clearInterval(this.adaptIntervalHandle);
       this.adaptIntervalHandle = 0;
+    }
+    if (this.drawResizeObserver) {
+      this.drawResizeObserver.disconnect();
+      this.drawResizeObserver = null;
     }
     this.stopStatsMonitor();
     this.rtcPeerConnections.forEach((peer) => peer.close());
@@ -1196,6 +1570,116 @@ export default defineComponent({
   0% { transform: translateY(0) scale(0.6); opacity: 0; }
   15% { opacity: 1; transform: translateY(-10%) scale(1); }
   100% { transform: translateY(-90vh) scale(1.2); opacity: 0; }
+}
+
+/* Host drawing annotation layer */
+.draw-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.draw-layer.active {
+  pointer-events: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* Host drawing toolbar */
+.draw-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.72);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.draw-toolbar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1em;
+  padding: 5px 8px;
+  min-width: 0;
+  line-height: 1;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.draw-toolbar button:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.draw-toolbar .draw-tool.sel {
+  background: rgba(255, 255, 255, 0.32);
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+.draw-toolbar .draw-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+.draw-toolbar .draw-swatch.sel {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+
+.draw-toolbar .draw-color-input {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.draw-toolbar .draw-width {
+  width: 90px;
+  cursor: pointer;
+}
+
+.draw-toolbar .draw-width-preview {
+  display: inline-block;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.draw-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Active state for the footer draw toggle */
+.video-controls button.draw-toggle-active {
+  background: rgba(255, 255, 255, 0.45);
+  border-color: rgba(255, 255, 255, 0.85);
 }
 
 /* Connection quality badge */
