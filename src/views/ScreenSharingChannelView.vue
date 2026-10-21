@@ -1184,11 +1184,11 @@ export default defineComponent({
       }
     },
     // ---- ICE servers (STUN + optional TURN) -------------------------------
-    async loadIceServers() {
+    async loadIceServers(authorizationToken: string) {
       // Fetch short-lived TURN credentials. Without a TURN relay, connections on
       // restrictive networks (e.g. mobile/CGNAT) fail; TURN fixes those cases.
       try {
-        const credentials = await getTurnCredentials();
+        const credentials = await getTurnCredentials(authorizationToken);
         if (credentials && Array.isArray(credentials.iceServers) && credentials.iceServers.length > 0) {
           const servers = credentials.iceServers
             .map((server) => {
@@ -1207,7 +1207,7 @@ export default defineComponent({
     },
     // ---- Signaling --------------------------------------------------------
     async initializeWebSocket(authorizationToken: string) {
-      await this.loadIceServers();
+      await this.loadIceServers(authorizationToken);
       this.signalingWebSocketClient = new SignalingWebSocketClient(authorizationToken);
 
       this.signalingWebSocketClient.onerror = () => {

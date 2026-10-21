@@ -19,8 +19,10 @@ function getPublicChannels() {
 }
 
 // Get short-lived STUN/TURN ICE servers
-function getTurnCredentials() {
-  return sharingV1.getRequest<TurnCredentialsDto>('/turn-credentials');
+function getTurnCredentials(authorizationToken: string) {
+  return sharingV1.getRequest<TurnCredentialsDto>('/turn-credentials', null, {
+    Authorization: authorizationToken,
+  });
 }
 
 // Join Sharing Channel
