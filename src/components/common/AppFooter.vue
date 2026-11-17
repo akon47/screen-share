@@ -8,7 +8,7 @@
         </a>
       </div>
       <div class="counter">
-        <img src="https://counter.kimhwan.kr?key=screenshare.kimhwan.kr"/>
+        <img src="https://counter.kimhwan.com?key=screenshare.kimhwan.kr"/>
       </div>
     </div>
   </div>

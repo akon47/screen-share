@@ -1,8 +1,8 @@
-# [Screen Share](https://screenshare.kimhwan.kr)
+# [Screen Share](https://screenshare.kimhwan.com)
 
 <p>
 
-  <img src="https://counter.kimhwan.kr/?key=github-akon47-screen-share" />
+  <img src="https://counter.kimhwan.com/?key=github-akon47-screen-share" />
   <img alt="GitHub" src="https://img.shields.io/github/license/akon47/screen-share">
   <img alt="GitHub starts" src="https://img.shields.io/github/stars/akon47/screen-share">
 </p>
